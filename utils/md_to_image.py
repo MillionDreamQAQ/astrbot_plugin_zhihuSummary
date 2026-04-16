@@ -24,17 +24,6 @@ _browser = None
 _playwright = None
 
 
-# 卡片左边框的颜色循环 (蓝、绿、紫、橙、青、粉)
-CARD_COLORS = [
-    ('#0066FF', 'rgba(0,102,255,.10)'),     # 知乎蓝
-    ('#34d399', 'rgba(52,211,153,.10)'),
-    ('#a78bfa', 'rgba(167,139,250,.10)'),
-    ('#fb923c', 'rgba(251,146,60,.10)'),
-    ('#22d3ee', 'rgba(34,211,238,.10)'),
-    ('#f472b6', 'rgba(244,114,182,.10)'),
-]
-
-
 async def _get_browser():
     """获取或创建浏览器实例"""
     global _browser, _playwright
@@ -64,7 +53,7 @@ async def _get_browser():
         return _browser
 
 
-async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 1400) -> Optional[str]:
+async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 800) -> Optional[str]:
     """异步渲染图片"""
     browser = None
     page = None
@@ -168,14 +157,13 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
 
 
 def _wrap_sections_in_cards(html: str) -> str:
-    """将 HTML 按 h2 标题拆分为独立卡片，每个卡片使用不同的左边框颜色"""
+    """将 HTML 按 h2 标题拆分为独立卡片"""
     parts = re.split(r'(<h2[^>]*>.*?</h2>)', html, flags=re.DOTALL | re.IGNORECASE)
 
     if len(parts) <= 1:
-        return f'<div class="card card-0">{html}</div>'
+        return f'<div class="card">{html}</div>'
 
     result = []
-    card_idx = 0
 
     before_first_h2 = parts[0].strip()
     if before_first_h2:
@@ -185,15 +173,10 @@ def _wrap_sections_in_cards(html: str) -> str:
     while i < len(parts):
         h2_tag = parts[i] if i < len(parts) else ''
         content = parts[i + 1] if i + 1 < len(parts) else ''
-        color_idx = card_idx % len(CARD_COLORS)
-        border_color, bg_color = CARD_COLORS[color_idx]
 
         result.append(
-            f'<div class="card card-{color_idx}" '
-            f'style="border-left-color:{border_color};background:{bg_color}">'
-            f'{h2_tag}{content}</div>'
+            f'<div class="card">{h2_tag}{content}</div>'
         )
-        card_idx += 1
         i += 2
 
     return '\n'.join(result)
@@ -213,9 +196,9 @@ def _build_full_html(body_html: str, logo_data_uri: Optional[str], title_text: s
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{
   font-family:'Microsoft YaHei','PingFang SC','Noto Sans SC','Hiragino Sans GB',sans-serif;
-  background:#1a1b2e;
-  color:#c9cedc;
-  width:1400px;
+  background:#ffffff;
+  color:#333333;
+  width:800px;
   line-height:1.85;
   font-size:15px;
   padding: 0;
@@ -223,140 +206,104 @@ body{{
 
 /* ── 顶部 Header ── */
 .header{{
-  background:linear-gradient(135deg,#1a1f3a 0%,#1e2444 30%,#1a2744 70%,#1a1f3a 100%);
-  padding:40px 56px 32px;
-  border-bottom:2px solid rgba(0,102,255,.25);
-  position:relative;
-  overflow:hidden;
+  background:#f8f9fa;
+  padding:30px 40px 24px;
+  border-bottom:2px solid #e0e0e0;
   text-align:center;
 }}
-.header::before{{
-  content:'';position:absolute;top:0;left:0;right:0;bottom:0;
-  background:radial-gradient(ellipse at 70% 0%,rgba(0,102,255,.12) 0%,transparent 55%),
-             radial-gradient(ellipse at 30% 100%,rgba(96,165,250,.10) 0%,transparent 55%);
-  pointer-events:none;
-}}
 .header h1{{
-  position:relative;z-index:1;
-  font-size:28px;font-weight:800;color:#f1f5f9;margin:0 auto;
-  line-height:1.4;letter-spacing:.5px;
-  background:linear-gradient(90deg,#e2e8f0 0%,#60a5fa 50%,#c4b5fd 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  background-clip:text;
+  font-size:24px;font-weight:700;color:#333333;margin:0 auto;
+  line-height:1.4;
   max-width:90%;
 }}
 .header-line{{
-  position:relative;z-index:1;
-  width:80px;height:3px;margin:14px auto 0;
-  background:linear-gradient(90deg,#0066FF,#60a5fa);
-  border-radius:2px;
+  width:60px;height:2px;margin:12px auto 0;
+  background:#333333;
 }}
 
 /* ── 内容区 — 单列布局 ── */
 .content{{
-  padding:28px 60px 20px;
+  padding:24px 40px 20px;
   display:block;
 }}
 
 /* ── 卡片通用 ── */
 .card,.card-intro{{
-  background:rgba(30,33,64,.65);
-  border-radius:12px;
-  border:1px solid rgba(148,163,184,.08);
-  border-left:4px solid #0066FF;
-  padding:20px 24px;
-  box-shadow:0 2px 8px rgba(0,0,0,.2);
-  margin-bottom:20px;
+  background:#ffffff;
+  border-radius:8px;
+  border:1px solid #e0e0e0;
+  border-left:3px solid #333333;
+  padding:18px 20px;
+  margin-bottom:16px;
 }}
 .card-intro{{
-  border-left-color:#a5f3c4;
-  background:rgba(52,211,153,.06);
-}}
-.card-full{{
-  width:100%;
-}}
-.card-intro{{
-  border-left-color:#a5f3c4;
-  background:rgba(52,211,153,.06);
-}}
-.card-full{{
-  width:100%;
+  border-left-color:#666666;
+  background:#f8f9fa;
 }}
 
 /* ── 标题 ── */
-h1{{font-size:22px;font-weight:700;color:#e2e8f0;margin-bottom:12px}}
+h1{{font-size:20px;font-weight:700;color:#333333;margin-bottom:12px}}
 h2{{
-  font-size:16px;font-weight:700;color:#e2e8f0;
-  margin:-20px -24px 14px;
-  padding:12px 24px 10px;
-  border-radius:12px 12px 0 0;
-  background:rgba(0,0,0,.18);
-  border-bottom:1px solid rgba(148,163,184,.08);
-  display:flex;align-items:center;gap:8px;
-  letter-spacing:.3px;
+  font-size:16px;font-weight:700;color:#333333;
+  margin:-18px -20px 12px;
+  padding:10px 20px 8px;
+  background:#f8f9fa;
+  border-bottom:1px solid #e0e0e0;
 }}
-h2::before{{
-  content:'';display:inline-block;width:8px;height:8px;border-radius:50%;
-  background:currentColor;opacity:.6;flex-shrink:0;
-}}
-h3{{font-size:15px;font-weight:700;color:#93c5fd;margin-top:16px;margin-bottom:8px;
-    padding-left:12px;border-left:3px solid rgba(0,102,255,.4)}}
-h4,h5,h6{{font-size:14px;font-weight:600;color:#c4b5fd;margin-top:12px;margin-bottom:6px}}
+h3{{font-size:15px;font-weight:700;color:#333333;margin-top:14px;margin-bottom:8px;
+    padding-left:10px;border-left:3px solid #666666}}
+h4,h5,h6{{font-size:14px;font-weight:600;color:#333333;margin-top:10px;margin-bottom:6px}}
 
 /* ── 文本 ── */
-p{{margin-bottom:10px;text-align:justify;word-break:break-word;font-size:14px}}
-strong{{color:#f9a8d4;font-weight:700}}
-em{{color:#67e8f9;font-style:italic}}
+p{{margin-bottom:10px;text-align:justify;word-break:break-word;font-size:14px;color:#333333}}
+strong{{color:#000000;font-weight:700}}
+em{{color:#555555;font-style:italic}}
 
 /* ── 列表 ── */
-ul,ol{{margin-bottom:10px;padding-left:20px}}
-li{{margin-bottom:5px;line-height:1.7;padding-left:4px;font-size:14px}}
-li::marker{{color:#0066FF;font-weight:700}}
+ul,ol{{margin-bottom:10px;padding-left:24px}}
+li{{margin-bottom:5px;line-height:1.7;font-size:14px;color:#333333}}
+li::marker{{color:#666666;font-weight:700}}
 
 /* ── 引用块 ── */
 blockquote{{
-  background:rgba(0,102,255,.06);
-  border-left:3px solid #0066FF;
-  border-radius:0 10px 10px 0;
-  padding:12px 18px;
+  background:#f8f9fa;
+  border-left:3px solid #666666;
+  padding:12px 16px;
   margin:12px 0;
-  color:#a5b4fc;
-  box-shadow:0 2px 6px rgba(0,102,255,.06);
+  color:#555555;
 }}
 blockquote p{{margin-bottom:4px}}
 
 /* ── 代码 ── */
-code{{background:rgba(248,113,113,.1);color:#fca5a5;padding:2px 6px;border-radius:6px;
+code{{background:#f0f0f0;color:#d32f2f;padding:2px 6px;border-radius:4px;
       font-size:13px;font-family:'Consolas','Monaco',monospace}}
-pre{{background:#12132a;color:#e2e8f0;padding:12px 16px;border-radius:10px;margin:10px 0;
-     font-size:13px;line-height:1.5;border:1px solid rgba(148,163,184,.1);
-     box-shadow:inset 0 1px 4px rgba(0,0,0,.3);overflow-x:auto}}
+pre{{background:#f5f5f5;color:#333333;padding:12px 16px;border-radius:6px;margin:10px 0;
+     font-size:13px;line-height:1.5;border:1px solid #e0e0e0;overflow-x:auto}}
 pre code{{background:transparent;color:inherit;padding:0}}
 
 /* ── 分隔线 ── */
 hr{{border:none;height:1px;
-    background:linear-gradient(to right,transparent,rgba(148,163,184,.2),transparent);
+    background:#e0e0e0;
     margin:16px 0}}
 
 /* ── 表格 ── */
-table{{width:100%;border-collapse:collapse;margin:10px 0;border-radius:8px;overflow:hidden}}
-th{{background:rgba(0,102,255,.12);color:#93c5fd;font-weight:700;padding:8px 12px;
-    text-align:left;border-bottom:2px solid rgba(0,102,255,.2);font-size:14px}}
-td{{padding:6px 12px;border-bottom:1px solid rgba(148,163,184,.08);font-size:14px}}
-tr:nth-child(even) td{{background:rgba(148,163,184,.03)}}
+table{{width:100%;border-collapse:collapse;margin:10px 0}}
+th{{background:#f8f9fa;color:#333333;font-weight:700;padding:8px 12px;
+    text-align:left;border-bottom:2px solid #e0e0e0;font-size:14px}}
+td{{padding:6px 12px;border-bottom:1px solid #e0e0e0;font-size:14px;color:#333333}}
+tr:nth-child(even) td{{background:#fafafa}}
 
 /* ── Footer ── */
 .footer{{
-  padding:14px 40px;
-  border-top:1px solid rgba(148,163,184,.1);
+  padding:12px 40px;
+  border-top:1px solid #e0e0e0;
   display:flex;align-items:center;justify-content:space-between;
-  background:rgba(0,0,0,.1);
+  background:#f8f9fa;
 }}
-.footer .flogo{{width:22px;height:22px;border-radius:6px;object-fit:cover;opacity:.7}}
-.footer .flogo-e{{font-size:16px;opacity:.7}}
-.ftxt{{font-size:11px;color:#64748b;letter-spacing:.8px;font-family:'Consolas',monospace}}
-.ftxt .br{{color:#94a3b8;font-weight:700}}
-.ftime{{font-size:11px;color:#4a5568;letter-spacing:.5px;font-family:'Consolas',monospace}}
+.footer .flogo{{width:20px;height:20px;object-fit:cover;opacity:0.6}}
+.ftxt{{font-size:11px;color:#888888;letter-spacing:0.5px;font-family:'Consolas',monospace}}
+.ftxt .br{{color:#333333;font-weight:600}}
+.ftime{{font-size:11px;color:#888888;letter-spacing:0.5px;font-family:'Consolas',monospace}}
 </style></head>
 <body>
 <div class="header">
@@ -408,7 +355,7 @@ def _get_logo_data_uri() -> Optional[str]:
 def render_note_image(
     markdown_text: str,
     output_path: str,
-    width: int = 1400,
+    width: int = 800,
 ) -> Optional[str]:
     """
     将 Markdown 渲染为 PNG 图片。
