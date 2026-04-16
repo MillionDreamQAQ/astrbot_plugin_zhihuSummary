@@ -5,19 +5,24 @@
 支持长文本的截断和 Map-Reduce 两种策略。
 """
 
-import asyncio
 from typing import Optional
 
 from astrbot.api import logger
 
-from .zhihu_api import fetch_content
-from ..utils.html_to_text import html_to_markdown, html_to_plain_text, estimate_char_count
-from ..gpt.prompt_builder import (
+from utils.html_to_text import (
+    html_to_markdown,
+    html_to_plain_text,
+    estimate_char_count,
+)
+
+from gpt.prompt_builder import (
     build_answer_prompt,
     build_article_prompt,
     build_map_chunk_prompt,
     build_map_merge_prompt,
 )
+
+from .zhihu_api import fetch_content
 
 
 class SummaryService:
@@ -76,7 +81,7 @@ class SummaryService:
             if long_text_strategy == "map_reduce":
                 logger.info(f"长文本({char_count}字)，使用 Map-Reduce 策略")
                 markdown = await self._summarize_map_reduce(
-                    content_data, style, max_length, long_text_threshold, llm_ask_func
+                    content_data, style, llm_ask_func
                 )
             else:
                 logger.info(f"长文本({char_count}字)，截断到 {long_text_threshold} 字")
@@ -84,7 +89,9 @@ class SummaryService:
                     content_text[:long_text_threshold]
                     + "\n\n...(内容过长，已截断，完整内容请查看原文)"
                 )
-                markdown = await self._summarize_direct(content_data, style, llm_ask_func)
+                markdown = await self._summarize_direct(
+                    content_data, style, llm_ask_func
+                )
         else:
             markdown = await self._summarize_direct(content_data, style, llm_ask_func)
 
@@ -134,8 +141,6 @@ class SummaryService:
         self,
         content_data: dict,
         style: str,
-        max_length: int,
-        threshold: int,
         llm_ask_func,
     ) -> Optional[str]:
         """Map-Reduce 总结：分段总结后合并"""
