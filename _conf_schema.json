@@ -1,0 +1,115 @@
+{
+  "zhihu_cookie_z_c0": {
+    "description": "知乎 Cookie z_c0 值",
+    "type": "string",
+    "default": "",
+    "hint": "登录知乎后从浏览器 Cookie 中复制 z_c0 的值粘贴到这里"
+  },
+  "debug_mode": {
+    "description": "启用调试日志",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后输出详细 Debug 日志"
+  },
+  "llm_provider": {
+    "description": "LLM 提供者",
+    "type": "string",
+    "default": "astrbot",
+    "options": [
+      "astrbot",
+      "openai_compatible"
+    ],
+    "hint": "astrbot(使用AstrBot内置LLM) / openai_compatible(使用自定义OpenAI兼容API)"
+  },
+  "llm_api_base": {
+    "description": "OpenAI兼容API地址",
+    "type": "string",
+    "default": "",
+    "hint": "当llm_provider为openai_compatible时填写，例如 https://api.openai.com/v1"
+  },
+  "llm_api_key": {
+    "description": "OpenAI兼容API密钥",
+    "type": "string",
+    "default": "",
+    "hint": "当llm_provider为openai_compatible时填写API Key"
+  },
+  "llm_model": {
+    "description": "OpenAI兼容API模型名称",
+    "type": "string",
+    "default": "gpt-4o-mini",
+    "hint": "当llm_provider为openai_compatible时填写模型名，如 gpt-4o-mini, deepseek-chat 等"
+  },
+  "enable_auto_detect": {
+    "description": "启用知乎链接自动识别",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，机器人会自动识别群内分享的知乎链接并生成总结"
+  },
+  "output_image": {
+    "description": "总结以图片形式发送",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后总结将渲染为精美图片发送（需要安装 wkhtmltopdf），关闭则发送纯文本"
+  },
+  "note_style": {
+    "description": "总结风格",
+    "type": "string",
+    "default": "professional",
+    "options": [
+      "concise",
+      "detailed",
+      "professional"
+    ],
+    "hint": "concise(简洁) / detailed(详细) / professional(专业结构化)"
+  },
+  "max_note_length": {
+    "description": "总结最大字符数",
+    "type": "int",
+    "default": 4000,
+    "min": 500,
+    "max": 10000,
+    "hint": "总结最大字符数，超过将自动截断"
+  },
+  "long_text_strategy": {
+    "description": "长文本处理策略",
+    "type": "string",
+    "default": "truncate",
+    "options": [
+      "truncate",
+      "map_reduce"
+    ],
+    "hint": "truncate(截断到阈值上限) / map_reduce(分段总结再合并，更慢但更完整)"
+  },
+  "long_text_threshold": {
+    "description": "长文本阈值(字符数)",
+    "type": "int",
+    "default": 15000,
+    "min": 5000,
+    "max": 50000,
+    "hint": "超过此长度触发长文本处理策略"
+  },
+  "processing_timeout": {
+    "description": "处理超时时间(秒)",
+    "type": "int",
+    "default": 120,
+    "min": 30,
+    "max": 300,
+    "hint": "单个总结生成的最大超时时间"
+  },
+  "access_mode": {
+    "description": "群聊访问控制模式",
+    "type": "string",
+    "default": "blacklist",
+    "options": [
+      "blacklist",
+      "whitelist"
+    ],
+    "hint": "blacklist(黑名单模式) / whitelist(白名单模式)"
+  },
+  "group_list": {
+    "description": "群号列表(逗号分隔)",
+    "type": "string",
+    "default": "",
+    "hint": "黑名单/白名单的群号列表，用英文逗号分隔"
+  }
+}

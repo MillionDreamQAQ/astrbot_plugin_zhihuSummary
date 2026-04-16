@@ -1,0 +1,6 @@
+name: astrbot_plugin_zhihuSummary
+display_name: zhihuSummary 知乎总结
+desc: 发送知乎回答/文章链接，自动生成AI结构化总结
+version: v1.0.0
+author: MillionDreamQAQ
+repo: https://github.com/MillionDreamQAQ/astrbot_plugin_zhihuSummary
