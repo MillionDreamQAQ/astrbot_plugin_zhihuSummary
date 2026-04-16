@@ -54,7 +54,7 @@
   "note_style": {
     "description": "总结风格",
     "type": "string",
-    "default": "professional",
+    "default": "detailed",
     "options": [
       "concise",
       "detailed",

@@ -77,7 +77,7 @@ PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ playwright in
 | llm_model | `gpt-4o-mini` | 模型名称 |
 | enable_auto_detect | `false` | 自动识别知乎链接 |
 | output_image | `true` | 图片模式发送（需 playwright） |
-| note_style | `professional` | 总结风格：`concise` / `detailed` / `professional` |
+| note_style | `detailed` | 总结风格：`concise` / `detailed` / `professional` |
 | max_note_length | `4000` | 总结最大字符数 |
 | long_text_strategy | `truncate` | 长文本策略：`truncate` / `map_reduce` |
 | long_text_threshold | `15000` | 长文本阈值（字符数） |
@@ -116,8 +116,8 @@ PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ playwright in
 | 风格 | 说明 |
 |------|------|
 | `concise` | 简洁模式 — 仅核心要点，5-8 个要点 |
-| `detailed` | 详细模式 — 完整记录，保留示例和数据 |
-| `professional` | 专业模式 — 结构化分析，深度总结（默认） |
+| `detailed` | 详细模式 — 完整记录，保留示例和数据（默认） |
+| `professional` | 专业模式 — 结构化分析，深度总结 |
 
 ## 项目结构
 
@@ -154,7 +154,7 @@ A: 需要安装 playwright 和 chromium 浏览器：
 
 ```bash
 pip install playwright
-set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ && playwright install chromium
+set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ && playwright install
 ```
 
 或将 `output_image` 关闭，使用纯文本模式。
@@ -169,12 +169,12 @@ pip install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 浏览器下载使用镜像
 set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/
-playwright install chromium
+playwright install
 ```
 
 ## 鸣谢
 
-本项目参考了 [storyAura/astrbot_plugin_biliVideo](https://github.com/storyAura/astrbot_plugin_biliVideo)（B站视频总结插件）的架构设计，复用了其图片渲染模块、LLM 调度模式和插件框架集成方案。感谢原作者的开源贡献。
+本项目参考了 [storyAura/astrbot_plugin_biliVideo](https://github.com/storyAura/astrbot_plugin_biliVideo)（B站视频总结插件）的架构设计，LLM 调度模式和插件框架集成方案。感谢原作者的开源贡献。
 
 ## License
 
