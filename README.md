@@ -7,7 +7,7 @@
 - **知乎总结**：发送知乎链接，自动抓取内容并通过 LLM 生成结构化总结
 - **多类型支持**：回答、专栏文章、问题（自动取高赞回答）
 - **自动识别**：开启后自动检测群聊中的知乎链接并生成总结
-- **精美渲染**：总结可渲染为暗色主题卡片图片（需 wkhtmltopdf）
+- **精美渲染**：总结可渲染为卡片图片（需 playwright）
 - **长文本处理**：支持截断和 Map-Reduce 分段总结两种策略
 - **多种 LLM**：支持 AstrBot 内置 LLM 或自定义 OpenAI 兼容 API
 - **访问控制**：黑名单/白名单模式控制群聊使用权限
@@ -17,7 +17,7 @@
 ### 前置依赖
 
 - [AstrBot](https://github.com/Soulter/AstrBot) v3.5+
-- [wkhtmltopdf](https://wkhtmltopdf.org/)（图片渲染模式需要）
+- Python 3.8+
 
 ### 安装插件
 
@@ -31,7 +31,23 @@ git clone https://github.com/MillionDreamQAQ/astrbot_plugin_zhihuSummary.git
 ### 安装 Python 依赖
 
 ```bash
+# 使用清华镜像加速（推荐）
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 或永久配置镜像源
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 pip install -r requirements.txt
+```
+
+### 安装 Playwright 浏览器（图片渲染需要）
+
+```bash
+# 国内用户必须使用镜像，否则下载极慢
+# Windows
+set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ && playwright install
+
+# Linux/macOS
+PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ playwright install
 ```
 
 ## 配置
@@ -48,8 +64,8 @@ pip install -r requirements.txt
 
 1. 在浏览器中登录 [知乎](https://www.zhihu.com)
 2. 按 `F12` 打开开发者工具
-3. 切换到 `Application` → `Cookies` → `https://www.zhihu.com`
-4. 复制其值填入插件配置
+3. 切换到 `Network` → 刷新页面 → 点击任意 zhihu.com 请求
+4. 在 `Request Headers` 中找到 `Cookie`，复制完整值填入配置
 
 ### 可选配置
 
@@ -60,7 +76,7 @@ pip install -r requirements.txt
 | llm_api_key | - | OpenAI 兼容 API 密钥 |
 | llm_model | `gpt-4o-mini` | 模型名称 |
 | enable_auto_detect | `false` | 自动识别知乎链接 |
-| output_image | `true` | 图片模式发送（需 wkhtmltopdf） |
+| output_image | `true` | 图片模式发送（需 playwright） |
 | note_style | `professional` | 总结风格：`concise` / `detailed` / `professional` |
 | max_note_length | `4000` | 总结最大字符数 |
 | long_text_strategy | `truncate` | 长文本策略：`truncate` / `map_reduce` |
@@ -134,7 +150,27 @@ A: 可以将 `long_text_strategy` 改为 `map_reduce`，会分段总结后再合
 
 **Q: 图片渲染失败？**
 
-A: 需要安装 [wkhtmltopdf](https://wkhtmltopdf.org/) 并确保其在系统 PATH 中。或将 `output_image` 关闭，使用纯文本模式。
+A: 需要安装 playwright 和 chromium 浏览器：
+
+```bash
+pip install playwright
+set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/ && playwright install chromium
+```
+
+或将 `output_image` 关闭，使用纯文本模式。
+
+**Q: playwright 安装/下载很慢？**
+
+A: 国内用户必须使用镜像加速：
+
+```bash
+# pip 安装使用镜像
+pip install playwright -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 浏览器下载使用镜像
+set PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright/
+playwright install chromium
+```
 
 ## 鸣谢
 
