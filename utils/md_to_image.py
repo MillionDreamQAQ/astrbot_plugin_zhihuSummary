@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import re
-import threading
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -18,17 +17,22 @@ _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 _LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.ico")
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
 
-# 线程锁用于浏览器管理
-_lock = threading.Lock()
+# 异步锁用于浏览器管理
+_lock = asyncio.Lock()
 _browser = None
 _playwright = None
+_closing = False
 
 
 async def _get_browser():
     """获取或创建浏览器实例"""
-    global _browser, _playwright
+    global _browser, _playwright, _closing
 
-    with _lock:
+    async with _lock:
+        # 检查是否正在关闭
+        if _closing:
+            raise RuntimeError("浏览器实例正在关闭，无法创建新连接")
+
         # 检查浏览器是否还连接
         if _browser is not None:
             try:
@@ -53,9 +57,33 @@ async def _get_browser():
         return _browser
 
 
+async def close_browser():
+    """关闭浏览器实例并清理资源"""
+    global _browser, _playwright, _closing
+
+    async with _lock:
+        _closing = True
+        if _browser is not None:
+            try:
+                await _browser.close()
+                logger.info("浏览器实例已关闭")
+            except Exception as e:
+                logger.warning(f"关闭浏览器时出错: {e}")
+            _browser = None
+
+        if _playwright is not None:
+            try:
+                await _playwright.stop()
+                logger.info("Playwright 已停止")
+            except Exception as e:
+                logger.warning(f"停止 Playwright 时出错: {e}")
+            _playwright = None
+
+        _closing = False
+
+
 async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 800) -> Optional[str]:
     """异步渲染图片"""
-    browser = None
     page = None
 
     try:
@@ -88,6 +116,7 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # 获取浏览器（带重试）
+        browser = None
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -158,10 +187,6 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
             clip={'x': 0, 'y': 0, 'width': content_width, 'height': content_height}
         )
 
-        # 关闭页面
-        await page.close()
-        page = None
-
         if os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
             render_secs = round(_time.time() - render_start, 1)
@@ -173,15 +198,15 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
 
     except Exception as e:
         logger.error(f"渲染总结图片失败: {e}", exc_info=True)
+        return None
 
-        # 清理页面
+    finally:
+        # 确保页面一定会被关闭，防止资源泄漏
         if page is not None:
             try:
                 await page.close()
-            except Exception:
-                pass
-
-        return None
+            except Exception as e:
+                logger.warning(f"关闭页面时出错: {e}")
 
 
 def _wrap_sections_in_cards(html: str) -> str:

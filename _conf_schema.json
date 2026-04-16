@@ -49,7 +49,7 @@
     "description": "总结以图片形式发送",
     "type": "bool",
     "default": true,
-    "hint": "开启后总结将渲染为精美图片发送（需要安装 wkhtmltopdf），关闭则发送纯文本"
+    "hint": "开启后总结将渲染为精美图片发送（需要安装 playwright），关闭则发送纯文本"
   },
   "note_style": {
     "description": "总结风格",

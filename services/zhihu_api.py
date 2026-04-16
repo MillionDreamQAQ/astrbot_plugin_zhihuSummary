@@ -95,18 +95,14 @@ async def _do_request(
                 if resp.status == 429:
                     logger.warning("知乎 API 限流 (HTTP 429)，等待 2 秒后重试")
                     await asyncio.sleep(2)
-                    async with aiohttp.ClientSession(
-                        timeout=REQUEST_TIMEOUT
-                    ) as retry_session:
-                        async with retry_session.get(
-                            url, params=params, headers=headers
-                        ) as retry_resp:
-                            if retry_resp.status == 200:
-                                return await retry_resp.json()
-                            logger.warning(
-                                f"知乎 API 重试失败 (HTTP {retry_resp.status})"
-                            )
-                            return None
+                    # 复用当前 session 重试，避免创建新 session
+                    async with session.get(url, params=params, headers=headers) as retry_resp:
+                        if retry_resp.status == 200:
+                            return await retry_resp.json()
+                        logger.warning(
+                            f"知乎 API 重试失败 (HTTP {retry_resp.status})"
+                        )
+                        return None
 
                 logger.warning(f"知乎 API 请求失败: HTTP {resp.status}")
                 return None

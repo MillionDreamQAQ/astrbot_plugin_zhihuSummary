@@ -147,6 +147,49 @@ class ZhihuSummaryPlugin(Star):
             self._log("[Render] 渲染失败，回退纯文本")
             return note_text
 
+    async def _generate_and_render_summary(
+        self, content_type: str, content_id: str, loading_msg: str
+    ) -> str | list:
+        """
+        生成并渲染总结的公共方法，处理超时和异常。
+
+        :param content_type: 内容类型
+        :param content_id: 内容 ID
+        :param loading_msg: 加载提示消息
+        :return: 渲染后的结果（字符串或图片列表）
+        """
+        try:
+            note = await asyncio.wait_for(
+                self.summary_service.generate_summary(
+                    content_type=content_type,
+                    content_id=content_id,
+                    llm_ask_func=self._ask_llm,
+                    style=self.note_style,
+                    max_length=self.max_note_length,
+                    long_text_strategy=self.long_text_strategy,
+                    long_text_threshold=self.long_text_threshold,
+                ),
+                timeout=self.processing_timeout,
+            )
+        except asyncio.TimeoutError:
+            return f"❌ 总结生成超时（{self.processing_timeout}秒），请稍后重试"
+        except Exception as e:
+            logger.error(f"总结生成异常: {e}", exc_info=True)
+            return f"❌ 总结生成失败: {str(e)}"
+
+        if not note:
+            return (
+                "❌ 获取内容失败。可能原因：\n"
+                "• Cookie 已失效，请重新从浏览器复制完整 Cookie\n"
+                "• 内容不存在或已被删除\n"
+                "• 网络连接问题"
+            )
+
+        if note.startswith("❌"):
+            return note
+
+        return self._render_and_get_chain(note)
+
     # ==================== 命令 ====================
 
     @filter.command("知乎帮助", alias={"zhihu_help", "知乎help"})
@@ -233,42 +276,7 @@ class ZhihuSummaryPlugin(Star):
         # 生成总结
         yield event.plain_result("⏳ 正在获取知乎内容并生成总结，请稍候...")
 
-        try:
-            note = await asyncio.wait_for(
-                self.summary_service.generate_summary(
-                    content_type=content_type,
-                    content_id=content_id,
-                    llm_ask_func=self._ask_llm,
-                    style=self.note_style,
-                    max_length=self.max_note_length,
-                    long_text_strategy=self.long_text_strategy,
-                    long_text_threshold=self.long_text_threshold,
-                ),
-                timeout=self.processing_timeout,
-            )
-        except asyncio.TimeoutError:
-            yield event.plain_result("❌ 总结生成超时，请稍后重试")
-            return
-        except Exception as e:
-            logger.error(f"总结生成异常: {e}", exc_info=True)
-            yield event.plain_result(f"❌ 总结生成失败: {str(e)}")
-            return
-
-        if not note:
-            yield event.plain_result(
-                "❌ 获取内容失败。可能原因：\n"
-                "• Cookie 已失效，请重新从浏览器复制完整 Cookie\n"
-                "• 内容不存在或已被删除\n"
-                "• 网络连接问题"
-            )
-            return
-
-        if note.startswith("❌"):
-            yield event.plain_result(note)
-            return
-
-        # 渲染输出
-        rendered = self._render_and_get_chain(note)
+        rendered = await self._generate_and_render_summary(content_type, content_id, "")
         if isinstance(rendered, list):
             yield event.chain_result(rendered)
         else:
@@ -306,34 +314,10 @@ class ZhihuSummaryPlugin(Star):
         # 生成总结
         yield event.plain_result("⏳ 检测到知乎链接，正在生成总结...")
 
-        try:
-            note = await asyncio.wait_for(
-                self.summary_service.generate_summary(
-                    content_type=content_type,
-                    content_id=content_id,
-                    llm_ask_func=self._ask_llm,
-                    style=self.note_style,
-                    max_length=self.max_note_length,
-                    long_text_strategy=self.long_text_strategy,
-                    long_text_threshold=self.long_text_threshold,
-                ),
-                timeout=self.processing_timeout,
-            )
-        except asyncio.TimeoutError:
-            yield event.plain_result("❌ 总结生成超时")
-            return
-        except Exception as e:
-            logger.error(f"自动总结异常: {e}", exc_info=True)
-            return
-
-        if not note or note.startswith("❌"):
-            return
-
-        # 渲染输出
-        rendered = self._render_and_get_chain(note)
+        rendered = await self._generate_and_render_summary(content_type, content_id, "")
         if isinstance(rendered, list):
             yield event.chain_result(rendered)
-        else:
+        elif rendered and not rendered.startswith("❌"):
             yield event.plain_result(rendered)
 
     # ==================== LLM 调度 ====================
@@ -407,4 +391,11 @@ class ZhihuSummaryPlugin(Star):
 
     async def terminate(self):
         """插件卸载"""
+        # 清理浏览器资源
+        from .utils.md_to_image import close_browser
+        try:
+            await close_browser()
+        except Exception as e:
+            logger.warning(f"清理浏览器资源时出错: {e}")
+
         logger.info("zhihuSummary 知乎总结插件已卸载")
