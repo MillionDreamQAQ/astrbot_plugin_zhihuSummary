@@ -7,8 +7,6 @@
 
 import re
 from html.parser import HTMLParser
-from typing import Optional
-
 
 class ZhihuHTMLToMarkdown(HTMLParser):
     """知乎 HTML 转 Markdown 解析器"""
@@ -117,10 +115,8 @@ class ZhihuHTMLToMarkdown(HTMLParser):
         elif tag == "li":
             indent = "  " * (self._list_depth - 1)
             if self._list_counter:
-                is_ordered = self._list_counter[-1] > 0 or self._list_depth > 1
                 # 检查父标签是否为 ol
-                parent_ol = (len(self._tag_stack) >= 2
-                             and self._tag_stack[-2] == "ol")
+                parent_ol = len(self._tag_stack) >= 2 and self._tag_stack[-2] == "ol"
                 if parent_ol and self._list_counter:
                     self._list_counter[-1] += 1
                     self._emit(f"\n{indent}{self._list_counter[-1]}. ")
@@ -255,9 +251,17 @@ class ZhihuHTMLToMarkdown(HTMLParser):
 
     def handle_entityref(self, name: str):
         entities = {
-            "amp": "&", "lt": "<", "gt": ">", "quot": '"',
-            "apos": "'", "nbsp": " ", "mdash": "—", "ndash": "–",
-            "hellip": "…", "laquo": "«", "raquo": "»",
+            "amp": "&",
+            "lt": "<",
+            "gt": ">",
+            "quot": '"',
+            "apos": "'",
+            "nbsp": " ",
+            "mdash": "—",
+            "ndash": "–",
+            "hellip": "…",
+            "laquo": "«",
+            "raquo": "»",
         }
         self._emit(entities.get(name, f"&{name};"))
 
@@ -278,11 +282,11 @@ class ZhihuHTMLToMarkdown(HTMLParser):
         """获取转换后的 Markdown 文本"""
         result = "".join(self._output)
         # 清理多余空行
-        result = re.sub(r'\n{3,}', '\n\n', result)
+        result = re.sub(r"\n{3,}", "\n\n", result)
         # 清理行首尾空白
-        lines = result.split('\n')
+        lines = result.split("\n")
         lines = [line.rstrip() for line in lines]
-        result = '\n'.join(lines)
+        result = "\n".join(lines)
         return result.strip()
 
 
@@ -311,16 +315,16 @@ def html_to_plain_text(html_content: str) -> str:
         return ""
 
     # 移除标签
-    text = re.sub(r'<[^>]+>', '', html_content)
+    text = re.sub(r"<[^>]+>", "", html_content)
     # 处理 HTML 实体
-    text = text.replace('&amp;', '&')
-    text = text.replace('&lt;', '<')
-    text = text.replace('&gt;', '>')
-    text = text.replace('&quot;', '"')
-    text = text.replace('&#39;', "'")
-    text = text.replace('&nbsp;', ' ')
+    text = text.replace("&amp;", "&")
+    text = text.replace("&lt;", "<")
+    text = text.replace("&gt;", ">")
+    text = text.replace("&quot;", '"')
+    text = text.replace("&#39;", "'")
+    text = text.replace("&nbsp;", " ")
     # 清理空白
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 

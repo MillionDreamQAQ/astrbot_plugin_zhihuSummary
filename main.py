@@ -8,9 +8,9 @@ import asyncio
 import os
 import time
 
-from astrbot.api.event import filter, AstrMessageEvent, MessageChain
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, StarTools
-from astrbot.api.message_components import Plain, Image
+from astrbot.api.message_components import Image
 from astrbot.api import logger
 
 from .services.summary_service import SummaryService
@@ -148,7 +148,7 @@ class ZhihuSummaryPlugin(Star):
             return note_text
 
     async def _generate_and_render_summary(
-        self, content_type: str, content_id: str, loading_msg: str
+        self, content_type: str, content_id: str
     ) -> str | list:
         """
         生成并渲染总结的公共方法，处理超时和异常。
@@ -276,7 +276,7 @@ class ZhihuSummaryPlugin(Star):
         # 生成总结
         yield event.plain_result("⏳ 正在获取知乎内容并生成总结，请稍候...")
 
-        rendered = await self._generate_and_render_summary(content_type, content_id, "")
+        rendered = await self._generate_and_render_summary(content_type, content_id)
         if isinstance(rendered, list):
             yield event.chain_result(rendered)
         else:
@@ -314,7 +314,7 @@ class ZhihuSummaryPlugin(Star):
         # 生成总结
         yield event.plain_result("⏳ 检测到知乎链接，正在生成总结...")
 
-        rendered = await self._generate_and_render_summary(content_type, content_id, "")
+        rendered = await self._generate_and_render_summary(content_type, content_id)
         if isinstance(rendered, list):
             yield event.chain_result(rendered)
         elif rendered and not rendered.startswith("❌"):

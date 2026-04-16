@@ -11,27 +11,22 @@ from typing import Optional
 # ── URL 正则模式 ──
 
 # 回答: https://www.zhihu.com/question/123456/answer/789012
-_ANSWER_PATTERN = re.compile(
-    r'https?://(?:www\.)?zhihu\.com/question/\d+/answer/(\d+)'
-)
+_ANSWER_PATTERN = re.compile(r"https?://(?:www\.)?zhihu\.com/question/\d+/answer/(\d+)")
 
 # 文章（专栏）: https://zhuanlan.zhihu.com/p/123456
-_ARTICLE_PATTERN = re.compile(
-    r'https?://zhuanlan\.zhihu\.com/p/(\d+)'
-)
+_ARTICLE_PATTERN = re.compile(r"https?://zhuanlan\.zhihu\.com/p/(\d+)")
 
 # 问题（无指定回答）: https://www.zhihu.com/question/123456
 _QUESTION_PATTERN = re.compile(
-    r'https?://(?:www\.)?zhihu\.com/question/(\d+)(?:/(?:\?|$|\S))?',
-    re.IGNORECASE
+    r"https?://(?:www\.)?zhihu\.com/question/(\d+)(?:/(?:\?|$|\S))?", re.IGNORECASE
 )
 
 # 通用知乎域名检测
-_ZHIHU_DOMAIN = re.compile(r'zhihu\.com|zhuanlan\.zhihu\.com')
+_ZHIHU_DOMAIN = re.compile(r"zhihu\.com|zhuanlan\.zhihu\.com")
 
 # 短链接: https://zhi.hu/xxx 或 link.zhihu.com/?target=...
 _SHORT_LINK_PATTERN = re.compile(
-    r'https?://zhi\.hu/\S+|https?://link\.zhihu\.com/\?target=\S+'
+    r"https?://zhi\.hu/\S+|https?://link\.zhihu\.com/\?target=\S+"
 )
 
 # 提取所有 URL

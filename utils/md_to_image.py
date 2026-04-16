@@ -13,75 +13,75 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-_LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.png")
-
 # 异步锁用于浏览器管理
 _lock = asyncio.Lock()
-_browser = None
-_playwright = None
-_closing = False
+BROWSER = None
+PLAYWRIGHT = None
+CLOSING = False
 
 
 async def _get_browser():
     """获取或创建浏览器实例"""
-    global _browser, _playwright, _closing
+    global BROWSER, PLAYWRIGHT, CLOSING
 
     async with _lock:
         # 检查是否正在关闭
-        if _closing:
+        if CLOSING:
             raise RuntimeError("浏览器实例正在关闭，无法创建新连接")
 
         # 检查浏览器是否还连接
-        if _browser is not None:
+        if BROWSER is not None:
             try:
                 # 测试连接是否有效
-                if _browser.is_connected():
-                    return _browser
+                if BROWSER.is_connected():
+                    return BROWSER
             except Exception:
                 logger.warning("浏览器连接已断开，重新创建")
-                _browser = None
+                BROWSER = None
 
         # 创建新的浏览器实例
-        if _browser is None:
+        if BROWSER is None:
             try:
                 from playwright.async_api import async_playwright
-                _playwright = await async_playwright().start()
-                _browser = await _playwright.chromium.launch()
+
+                PLAYWRIGHT = await async_playwright().start()
+                BROWSER = await PLAYWRIGHT.chromium.launch()
                 logger.info("浏览器实例已创建")
             except Exception as e:
                 logger.error(f"启动浏览器失败: {e}")
                 raise
 
-        return _browser
+        return BROWSER
 
 
 async def close_browser():
     """关闭浏览器实例并清理资源"""
-    global _browser, _playwright, _closing
+    global BROWSER, PLAYWRIGHT, CLOSING
 
     async with _lock:
-        _closing = True
-        if _browser is not None:
+        CLOSING = True
+        if BROWSER is not None:
             try:
-                await _browser.close()
+                await BROWSER.close()
                 logger.info("浏览器实例已关闭")
             except Exception as e:
                 logger.warning(f"关闭浏览器时出错: {e}")
-            _browser = None
+            BROWSER = None
 
-        if _playwright is not None:
+        if PLAYWRIGHT is not None:
             try:
-                await _playwright.stop()
+                await PLAYWRIGHT.stop()
                 logger.info("Playwright 已停止")
             except Exception as e:
                 logger.warning(f"停止 Playwright 时出错: {e}")
-            _playwright = None
+            PLAYWRIGHT = None
 
-        _closing = False
+        CLOSING = False
 
 
-async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 800) -> Optional[str]:
+async def _render_note_image_async(
+    markdown_text: str, output_path: str, width: int = 800
+) -> Optional[str]:
     """异步渲染图片"""
     page = None
 
@@ -95,7 +95,7 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         # Markdown → HTML
         html_body = md.markdown(
             markdown_text,
-            extensions=['tables', 'fenced_code', 'nl2br'],
+            extensions=["tables", "fenced_code", "nl2br"],
         )
 
         # 提取标题
@@ -104,13 +104,10 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         # 将 h2 章节包裹为卡片
         html_body = _wrap_sections_in_cards(html_body)
 
-        # 获取 logo
-        logo_uri = _get_logo_data_uri()
-
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # 构建完整 HTML
-        full_html = _build_full_html(html_body, logo_uri, title_text, now_str)
+        full_html = _build_full_html(html_body, title_text, now_str)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -124,24 +121,26 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise
-                logger.warning(f"获取浏览器失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                logger.warning(
+                    f"获取浏览器失败 (尝试 {attempt + 1}/{max_retries}): {e}"
+                )
                 await asyncio.sleep(1)
 
         # 创建新页面
         page = await browser.new_page(
-            viewport={'width': width, 'height': 2000},
-            device_scale_factor=1
+            viewport={"width": width, "height": 2000}, device_scale_factor=1
         )
 
         # 设置内容 - 使用更长的等待时间
-        await page.set_content(full_html, wait_until='networkidle', timeout=30000)
+        await page.set_content(full_html, wait_until="networkidle", timeout=30000)
 
         # 额外等待确保渲染完成
         await page.wait_for_timeout(300)
 
         # 获取精确的内容尺寸
         try:
-            content_size = await page.evaluate('''() => {
+            content_size = await page.evaluate(
+                """() => {
                 const body = document.body;
                 const html = document.documentElement;
 
@@ -168,28 +167,31 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
                 }
 
                 return { width: contentWidth, height: contentHeight };
-            }''')
+            }"""
+            )
         except Exception as e:
             logger.warning(f"获取尺寸失败，使用默认值: {e}")
-            content_size = {'width': width, 'height': 2000}
+            content_size = {"width": width, "height": 2000}
 
         # 转换为整数
-        content_width = int(content_size['width'])
-        content_height = int(content_size['height']) + 10
+        content_width = int(content_size["width"])
+        content_height = int(content_size["height"]) + 10
 
         # 设置 viewport
-        await page.set_viewport_size({'width': content_width, 'height': content_height})
+        await page.set_viewport_size({"width": content_width, "height": content_height})
 
         # 截图（指定 clip 区域）
         await page.screenshot(
             path=output_path,
-            clip={'x': 0, 'y': 0, 'width': content_width, 'height': content_height}
+            clip={"x": 0, "y": 0, "width": content_width, "height": content_height},
         )
 
         if os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
             render_secs = round(_time.time() - render_start, 1)
-            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 尺寸: {content_width}x{content_height})")
+            logger.info(
+                f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 尺寸: {content_width}x{content_height})"
+            )
             return output_path
         else:
             logger.error("playwright 未生成文件")
@@ -210,7 +212,7 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
 
 def _wrap_sections_in_cards(html: str) -> str:
     """将 HTML 按 h2 标题拆分为独立卡片"""
-    parts = re.split(r'(<h2[^>]*>.*?</h2>)', html, flags=re.DOTALL | re.IGNORECASE)
+    parts = re.split(r"(<h2[^>]*>.*?</h2>)", html, flags=re.DOTALL | re.IGNORECASE)
 
     if len(parts) <= 1:
         return f'<div class="card">{html}</div>'
@@ -223,26 +225,21 @@ def _wrap_sections_in_cards(html: str) -> str:
 
     i = 1
     while i < len(parts):
-        h2_tag = parts[i] if i < len(parts) else ''
-        content = parts[i + 1] if i + 1 < len(parts) else ''
+        h2_tag = parts[i] if i < len(parts) else ""
+        content = parts[i + 1] if i + 1 < len(parts) else ""
 
-        result.append(
-            f'<div class="card">{h2_tag}{content}</div>'
-        )
+        result.append(f'<div class="card">{h2_tag}{content}</div>')
         i += 2
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
-def _build_full_html(body_html: str, logo_data_uri: Optional[str], title_text: str = '', footer_time: str = '') -> str:
+def _build_full_html(
+    body_html: str, title_text: str = "", footer_time: str = ""
+) -> str:
     """构建完整的 HTML"""
 
-    # Logo HTML
-    logo_html = ""
-    if logo_data_uri:
-        logo_html = f'<img class="flogo" src="{logo_data_uri}" alt="">'
-
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
@@ -369,39 +366,26 @@ tr:nth-child(even) td{{background:#fafafa}}
   <div class="ftxt">Powered by <span class="br">zhihuSummary+</span> · AI 知乎总结助手</div>
   <div class="ftime">{footer_time}</div>
 </div>
-</body></html>'''
+</body></html>"""
 
 
 def _extract_title(html: str) -> tuple:
     """提取 h1 标题文本，并从 body 中移除。格式化为 '标题 —— 作者'"""
-    m = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL | re.IGNORECASE)
+    m = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.DOTALL | re.IGNORECASE)
     if m:
-        title_text = re.sub(r'<[^>]+>', '', m.group(1)).strip()
-        html = html[:m.start()] + html[m.end():]
+        title_text = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+        html = html[: m.start()] + html[m.end() :]
         # 移除紧跟 h1 后面的重复标题段落
-        clean_title = re.sub(r'[📑📝🎬🎥\s]', '', title_text)
+        clean_title = re.sub(r"[📑📝🎬🎥\s]", "", title_text)
         if clean_title:
-            dup_pattern = r'<p[^>]*>[^<]*' + re.escape(clean_title[:20]) + r'[^<]*</p>'
-            html = re.sub(dup_pattern, '', html, count=1)
+            dup_pattern = r"<p[^>]*>[^<]*" + re.escape(clean_title[:20]) + r"[^<]*</p>"
+            html = re.sub(dup_pattern, "", html, count=1)
         # 将 " - 作者" 格式化为 " —— 作者"
-        if ' - ' in title_text:
-            parts = title_text.rsplit(' - ', 1)
+        if " - " in title_text:
+            parts = title_text.rsplit(" - ", 1)
             title_text = f"{parts[0]} —— {parts[1]}"
         return title_text, html
-    return 'AI 知乎总结', html
-
-
-def _get_logo_data_uri() -> Optional[str]:
-    """获取 logo 的 data URI"""
-    if os.path.exists(_LOGO_PATH):
-        try:
-            import base64
-            with open(_LOGO_PATH, 'rb') as f:
-                b64 = base64.b64encode(f.read()).decode()
-            return f"data:image/png;base64,{b64}"
-        except Exception:
-            pass
-    return None
+    return "AI 知乎总结", html
 
 
 def render_note_image(
@@ -419,7 +403,6 @@ def render_note_image(
     """
     try:
         # 在新线程中运行异步代码，避免事件循环冲突
-        import concurrent.futures
         import threading
 
         result = [None]

@@ -11,9 +11,9 @@ import asyncio
 import time
 from typing import Optional
 
-import aiohttp
-
 import logging
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +96,12 @@ async def _do_request(
                     logger.warning("知乎 API 限流 (HTTP 429)，等待 2 秒后重试")
                     await asyncio.sleep(2)
                     # 复用当前 session 重试，避免创建新 session
-                    async with session.get(url, params=params, headers=headers) as retry_resp:
+                    async with session.get(
+                        url, params=params, headers=headers
+                    ) as retry_resp:
                         if retry_resp.status == 200:
                             return await retry_resp.json()
-                        logger.warning(
-                            f"知乎 API 重试失败 (HTTP {retry_resp.status})"
-                        )
+                        logger.warning(f"知乎 API 重试失败 (HTTP {retry_resp.status})")
                         return None
 
                 logger.warning(f"知乎 API 请求失败: HTTP {resp.status}")
@@ -192,7 +192,9 @@ async def fetch_article(article_id: str, cookie_str: str) -> Optional[dict]:
         return None
 
 
-async def fetch_question_top_answer(question_id: str, cookie_str: str) -> Optional[dict]:
+async def fetch_question_top_answer(
+    question_id: str, cookie_str: str
+) -> Optional[dict]:
     """
     获取问题下的默认排序第一个回答（通常是高赞回答）。
 

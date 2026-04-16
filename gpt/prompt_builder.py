@@ -61,7 +61,7 @@ def build_article_prompt(
     author_name: str,
     voteup_count: int,
     content_text: str,
-    style: str = "professional",
+    style: str = "detailed",
     enable_ai_summary: bool = True,
 ) -> str:
     """
@@ -118,8 +118,7 @@ def build_map_merge_prompt(
     构建 Map-Reduce 合并 Prompt。
     """
     summaries_text = "\n\n---\n\n".join(
-        f"### 片段 {i+1}\n{s}"
-        for i, s in enumerate(chunk_summaries)
+        f"### 片段 {i+1}\n{s}" for i, s in enumerate(chunk_summaries)
     )
 
     style_instruction = ""
