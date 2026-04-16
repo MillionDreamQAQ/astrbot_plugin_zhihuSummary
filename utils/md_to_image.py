@@ -111,24 +111,8 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         # 额外等待确保渲染完成
         await page.wait_for_timeout(300)
 
-        # 获取页面实际高度（增加超时）
-        try:
-            body_height = await page.evaluate('() => document.body.scrollHeight', timeout=10000)
-
-            # 限制最大高度，防止过长内容
-            max_height = 32767  # PNG 格式高度限制
-            if body_height > max_height:
-                logger.warning(f"页面高度 {body_height} 超过限制，截断到 {max_height}")
-                body_height = max_height
-        except Exception as e:
-            logger.warning(f"获取页面高度失败: {e}，使用默认值")
-            body_height = 2000
-
-        # 重新设置 viewport
-        await page.set_viewport_size({'width': width, 'height': body_height})
-
-        # 截图（增加超时）
-        await page.screenshot(path=output_path, full_page=False, timeout=60000)
+        # 截图 - 使用 full_page=True 自动裁剪空白
+        await page.screenshot(path=output_path, full_page=True, timeout=60000)
 
         # 关闭页面
         await page.close()
@@ -137,7 +121,7 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         if os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
             render_secs = round(_time.time() - render_start, 1)
-            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 高度: {body_height})")
+            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s)")
             return output_path
         else:
             logger.error("playwright 未生成文件")
