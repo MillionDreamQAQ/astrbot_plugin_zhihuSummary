@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -17,18 +18,10 @@ _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
 _LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.ico")
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
 
-# Playwright 浏览器实例缓存
+# 线程锁用于浏览器管理
+_lock = threading.Lock()
 _browser = None
-_lock = None
-
-
-def _get_lock():
-    """获取线程锁"""
-    global _lock
-    if _lock is None:
-        import threading
-        _lock = threading.Lock()
-    return _lock
+_playwright = None
 
 
 # 卡片左边框的颜色循环 (蓝、绿、紫、橙、青、粉)
@@ -43,18 +36,135 @@ CARD_COLORS = [
 
 
 async def _get_browser():
-    """获取或创建浏览器实例（线程安全）"""
-    global _browser
-    with _get_lock():
+    """获取或创建浏览器实例"""
+    global _browser, _playwright
+
+    with _lock:
+        # 检查浏览器是否还连接
+        if _browser is not None:
+            try:
+                # 测试连接是否有效
+                if _browser.is_connected():
+                    return _browser
+            except Exception:
+                logger.warning("浏览器连接已断开，重新创建")
+                _browser = None
+
+        # 创建新的浏览器实例
         if _browser is None:
             try:
                 from playwright.async_api import async_playwright
-                playwright = await async_playwright().start()
-                _browser = await playwright.chromium.launch()
+                _playwright = await async_playwright().start()
+                _browser = await _playwright.chromium.launch()
+                logger.info("浏览器实例已创建")
             except Exception as e:
                 logger.error(f"启动浏览器失败: {e}")
                 raise
-    return _browser
+
+        return _browser
+
+
+async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 1400) -> Optional[str]:
+    """异步渲染图片"""
+    browser = None
+    page = None
+
+    try:
+        import markdown as md
+        import time as _time
+        from datetime import datetime
+
+        render_start = _time.time()
+
+        # Markdown → HTML
+        html_body = md.markdown(
+            markdown_text,
+            extensions=['tables', 'fenced_code', 'nl2br'],
+        )
+
+        # 提取标题
+        title_text, html_body = _extract_title(html_body)
+
+        # 将 h2 章节包裹为卡片
+        html_body = _wrap_sections_in_cards(html_body)
+
+        # 获取 logo
+        logo_uri = _get_logo_data_uri()
+
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # 构建完整 HTML
+        full_html = _build_full_html(html_body, logo_uri, title_text, now_str)
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # 获取浏览器（带重试）
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                browser = await _get_browser()
+                break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise
+                logger.warning(f"获取浏览器失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                await asyncio.sleep(1)
+
+        # 创建新页面
+        page = await browser.new_page(
+            viewport={'width': width, 'height': 2000},
+            device_scale_factor=1
+        )
+
+        # 设置内容 - 使用更长的等待时间
+        await page.set_content(full_html, wait_until='networkidle', timeout=30000)
+
+        # 额外等待确保渲染完成
+        await page.wait_for_timeout(300)
+
+        # 获取页面实际高度（增加超时）
+        try:
+            body_height = await page.evaluate('() => document.body.scrollHeight', timeout=10000)
+
+            # 限制最大高度，防止过长内容
+            max_height = 32767  # PNG 格式高度限制
+            if body_height > max_height:
+                logger.warning(f"页面高度 {body_height} 超过限制，截断到 {max_height}")
+                body_height = max_height
+        except Exception as e:
+            logger.warning(f"获取页面高度失败: {e}，使用默认值")
+            body_height = 2000
+
+        # 重新设置 viewport
+        await page.set_viewport_size({'width': width, 'height': body_height})
+
+        # 截图（增加超时）
+        await page.screenshot(path=output_path, full_page=False, timeout=60000)
+
+        # 关闭页面
+        await page.close()
+        page = None
+
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path)
+            render_secs = round(_time.time() - render_start, 1)
+            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 高度: {body_height})")
+            return output_path
+        else:
+            logger.error("playwright 未生成文件")
+            return None
+
+    except Exception as e:
+        logger.error(f"渲染总结图片失败: {e}", exc_info=True)
+
+        # 清理页面
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
+
+        return None
 
 
 def _wrap_sections_in_cards(html: str) -> str:
@@ -142,13 +252,10 @@ body{{
   border-radius:2px;
 }}
 
-/* ── 内容区 — 双栏网格 ── */
+/* ── 内容区 — 单列布局 ── */
 .content{{
-  padding:28px 40px 20px;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:20px;
-  align-items:start;
+  padding:28px 60px 20px;
+  display:block;
 }}
 
 /* ── 卡片通用 ── */
@@ -159,14 +266,21 @@ body{{
   border-left:4px solid #0066FF;
   padding:20px 24px;
   box-shadow:0 2px 8px rgba(0,0,0,.2);
+  margin-bottom:20px;
 }}
 .card-intro{{
-  grid-column:1 / -1;
   border-left-color:#a5f3c4;
   background:rgba(52,211,153,.06);
 }}
 .card-full{{
-  grid-column:1 / -1;
+  width:100%;
+}}
+.card-intro{{
+  border-left-color:#a5f3c4;
+  background:rgba(52,211,153,.06);
+}}
+.card-full{{
+  width:100%;
 }}
 
 /* ── 标题 ── */
@@ -291,75 +405,6 @@ def _get_logo_data_uri() -> Optional[str]:
     return None
 
 
-async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 1400) -> Optional[str]:
-    """异步渲染图片"""
-    try:
-        import markdown as md
-    except ImportError as e:
-        logger.error(f"缺少 markdown 依赖: {e}")
-        return None
-
-    try:
-        import time as _time
-        from datetime import datetime
-        render_start = _time.time()
-
-        # Markdown → HTML
-        html_body = md.markdown(
-            markdown_text,
-            extensions=['tables', 'fenced_code', 'nl2br'],
-        )
-
-        # 提取标题
-        title_text, html_body = _extract_title(html_body)
-
-        # 将 h2 章节包裹为卡片
-        html_body = _wrap_sections_in_cards(html_body)
-
-        # 获取 logo
-        logo_uri = _get_logo_data_uri()
-
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        # 构建完整 HTML
-        full_html = _build_full_html(html_body, logo_uri, title_text, now_str)
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-        # 使用 playwright 渲染
-        browser = await _get_browser()
-        page = await browser.new_page(viewport={'width': width, 'height': 1080})
-
-        # 设置内容
-        await page.set_content(full_html, wait_until='networkidle')
-
-        # 等待页面完全渲染
-        await page.wait_for_timeout(500)
-
-        # 获取页面实际高度
-        body_height = await page.evaluate('() => document.body.scrollHeight')
-
-        # 调整 viewport 高度
-        await page.set_viewport_size({'width': width, 'height': body_height})
-
-        # 截图
-        await page.screenshot(path=output_path, full_page=False)
-
-        await page.close()
-
-        if os.path.exists(output_path):
-            render_secs = round(_time.time() - render_start, 1)
-            logger.info(f"总结图片已生成: {output_path} ({os.path.getsize(output_path)} bytes, 渲染{render_secs}s)")
-            return output_path
-        else:
-            logger.error("playwright 未生成文件")
-            return None
-
-    except Exception as e:
-        logger.error(f"渲染总结图片失败: {e}", exc_info=True)
-        return None
-
-
 def render_note_image(
     markdown_text: str,
     output_path: str,
@@ -374,20 +419,35 @@ def render_note_image(
     :return: 成功返回图片路径，失败返回 None
     """
     try:
-        # 检查是否有正在运行的事件循环
-        try:
-            loop = asyncio.get_running_loop()
-            # 如果有正在运行的循环，创建任务
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
-                    _render_note_image_async(markdown_text, output_path, width)
-                )
-                return future.result()
-        except RuntimeError:
-            # 没有运行中的循环，直接运行
-            return asyncio.run(_render_note_image_async(markdown_text, output_path, width))
+        # 在新线程中运行异步代码，避免事件循环冲突
+        import concurrent.futures
+        import threading
+
+        result = [None]
+        exception = [None]
+
+        def run_in_thread():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result[0] = loop.run_until_complete(
+                        _render_note_image_async(markdown_text, output_path, width)
+                    )
+                finally:
+                    loop.close()
+            except Exception as e:
+                exception[0] = e
+
+        thread = threading.Thread(target=run_in_thread)
+        thread.start()
+        thread.join(timeout=60)  # 60秒超时
+
+        if exception[0]:
+            raise exception[0]
+
+        return result[0]
+
     except Exception as e:
         logger.error(f"渲染总结图片失败: {e}", exc_info=True)
         return None
