@@ -14,7 +14,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-_LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.ico")
+_LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.png")
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
 
 # 异步锁用于浏览器管理
