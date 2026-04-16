@@ -111,35 +111,52 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         # 额外等待确保渲染完成
         await page.wait_for_timeout(300)
 
-        # 获取精确的内容高度（使用 bounding box）
-        bounds = await page.evaluate('''() => {
-            const body = document.body;
-            const html = document.documentElement;
+        # 获取精确的内容尺寸
+        try:
+            content_size = await page.evaluate('''() => {
+                const body = document.body;
+                const html = document.documentElement;
 
-            // 获取实际的滚动高度
-            const scrollHeight = Math.max(
-                body.scrollHeight,
-                body.offsetHeight,
-                html.clientHeight,
-                html.scrollHeight,
-                html.offsetHeight
-            );
+                // 获取实际内容宽度
+                const contentWidth = Math.max(
+                    body.scrollWidth,
+                    body.offsetWidth,
+                    html.scrollWidth,
+                    html.offsetWidth
+                );
 
-            // 获取内容区域底部位置
-            const contentRect = document.querySelector('.content')?.getBoundingClientRect() || { bottom: 0 };
-            const footerRect = document.querySelector('.footer')?.getBoundingClientRect() || { bottom: 0 };
+                // 获取实际内容高度（footer底部）
+                const footer = document.querySelector('.footer');
+                let contentHeight;
+                if (footer) {
+                    contentHeight = footer.getBoundingClientRect().bottom + window.scrollY;
+                } else {
+                    contentHeight = Math.max(
+                        body.scrollHeight,
+                        body.offsetHeight,
+                        html.scrollHeight,
+                        html.offsetHeight
+                    );
+                }
 
-            // 使用 footer 底部位置作为实际高度
-            const actualBottom = Math.max(contentRect.bottom, footerRect.bottom);
+                return { width: contentWidth, height: contentHeight };
+            }''')
+        except Exception as e:
+            logger.warning(f"获取尺寸失败，使用默认值: {e}")
+            content_size = {'width': width, 'height': 2000}
 
-            return Math.min(scrollHeight, Math.ceil(actualBottom + window.scrollY));
-        }''', timeout=10000)
+        # 转换为整数
+        content_width = int(content_size['width'])
+        content_height = int(content_size['height']) + 10
 
-        # 设置 viewport 为精确高度
-        await page.set_viewport_size({'width': width, 'height': bounds})
+        # 设置 viewport
+        await page.set_viewport_size({'width': content_width, 'height': content_height})
 
-        # 截图整个页面
-        await page.screenshot(path=output_path, full_page=True, timeout=60000)
+        # 截图（指定 clip 区域）
+        await page.screenshot(
+            path=output_path,
+            clip={'x': 0, 'y': 0, 'width': content_width, 'height': content_height}
+        )
 
         # 关闭页面
         await page.close()
@@ -148,7 +165,7 @@ async def _render_note_image_async(markdown_text: str, output_path: str, width: 
         if os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
             render_secs = round(_time.time() - render_start, 1)
-            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 高度: {bounds})")
+            logger.info(f"总结图片已生成: {output_path} ({file_size} bytes, {render_secs}s, 尺寸: {content_width}x{content_height})")
             return output_path
         else:
             logger.error("playwright 未生成文件")
