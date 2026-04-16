@@ -9,13 +9,13 @@ from typing import Optional
 
 from astrbot.api import logger
 
-from utils.html_to_text import (
+from ..utils.html_to_text import (
     html_to_markdown,
     html_to_plain_text,
     estimate_char_count,
 )
 
-from gpt.prompt_builder import (
+from ..gpt.prompt_builder import (
     build_answer_prompt,
     build_article_prompt,
     build_map_chunk_prompt,
