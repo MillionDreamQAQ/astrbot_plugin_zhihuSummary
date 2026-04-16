@@ -2,10 +2,10 @@
 Markdown → 图片渲染
 
 将总结 Markdown 渲染为精美的暗色主题卡片图片。
-适配自 astrbot_plugin_biliVideo 的 md_to_image.py。
+使用 playwright 进行渲染。
 """
 
-import base64
+import asyncio
 import logging
 import os
 import re
@@ -14,43 +14,21 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-_LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.png")
+_LOGO_PATH = os.path.join(_ASSETS_DIR, "logo.ico")
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
 
-_FONT_MAP = {
-    "JetBrainsMono-Light.ttf": ("JetBrains Mono", "300"),
-    "JetBrainsMono-Bold.ttf": ("JetBrains Mono", "700"),
-    "JetBrainsMono-Thin.ttf": ("JetBrains Mono", "100"),
-}
-
-_font_face_cache: Optional[str] = None
+# Playwright 浏览器实例缓存
+_browser = None
+_lock = None
 
 
-def _build_font_faces() -> str:
-    """读取本地字体文件并生成 @font-face CSS（带缓存）"""
-    global _font_face_cache
-    if _font_face_cache is not None:
-        return _font_face_cache
-
-    faces = []
-    for filename, (family, weight) in _FONT_MAP.items():
-        path = os.path.join(_FONTS_DIR, filename)
-        if not os.path.exists(path):
-            logger.warning(f"字体文件不存在: {path}")
-            continue
-        try:
-            with open(path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode()
-            faces.append(
-                f"@font-face{{font-family:'{family}';font-weight:{weight};"
-                f"font-display:swap;"
-                f"src:url(data:font/truetype;base64,{b64}) format('truetype')}}"
-            )
-        except Exception as e:
-            logger.warning(f"读取字体 {filename} 失败: {e}")
-
-    _font_face_cache = "\n".join(faces)
-    return _font_face_cache
+def _get_lock():
+    """获取线程锁"""
+    global _lock
+    if _lock is None:
+        import threading
+        _lock = threading.Lock()
+    return _lock
 
 
 # 卡片左边框的颜色循环 (蓝、绿、紫、橙、青、粉)
@@ -64,14 +42,19 @@ CARD_COLORS = [
 ]
 
 
-def _get_logo_base64() -> str:
-    if os.path.exists(_LOGO_PATH):
-        try:
-            with open(_LOGO_PATH, 'rb') as f:
-                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
-        except Exception:
-            pass
-    return ""
+async def _get_browser():
+    """获取或创建浏览器实例（线程安全）"""
+    global _browser
+    with _get_lock():
+        if _browser is None:
+            try:
+                from playwright.async_api import async_playwright
+                playwright = await async_playwright().start()
+                _browser = await playwright.chromium.launch()
+            except Exception as e:
+                logger.error(f"启动浏览器失败: {e}")
+                raise
+    return _browser
 
 
 def _wrap_sections_in_cards(html: str) -> str:
@@ -106,13 +89,17 @@ def _wrap_sections_in_cards(html: str) -> str:
     return '\n'.join(result)
 
 
-def _build_full_html(body_html: str, logo_uri: str, title_text: str = '', footer_time: str = '') -> str:
-    font_faces = _build_font_faces()
+def _build_full_html(body_html: str, logo_data_uri: Optional[str], title_text: str = '', footer_time: str = '') -> str:
+    """构建完整的 HTML"""
+
+    # Logo HTML
+    logo_html = ""
+    if logo_data_uri:
+        logo_html = f'<img class="flogo" src="{logo_data_uri}" alt="">'
 
     return f'''<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-{font_faces}
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{
   font-family:'Microsoft YaHei','PingFang SC','Noto Sans SC','Hiragino Sans GB',sans-serif;
@@ -121,6 +108,7 @@ body{{
   width:1400px;
   line-height:1.85;
   font-size:15px;
+  padding: 0;
 }}
 
 /* ── 顶部 Header ── */
@@ -171,7 +159,6 @@ body{{
   border-left:4px solid #0066FF;
   padding:20px 24px;
   box-shadow:0 2px 8px rgba(0,0,0,.2);
-  backdrop-filter:blur(8px);
 }}
 .card-intro{{
   grid-column:1 / -1;
@@ -226,10 +213,10 @@ blockquote p{{margin-bottom:4px}}
 
 /* ── 代码 ── */
 code{{background:rgba(248,113,113,.1);color:#fca5a5;padding:2px 6px;border-radius:6px;
-      font-size:13px;font-family:'JetBrains Mono',monospace}}
+      font-size:13px;font-family:'Consolas','Monaco',monospace}}
 pre{{background:#12132a;color:#e2e8f0;padding:12px 16px;border-radius:10px;margin:10px 0;
      font-size:13px;line-height:1.5;border:1px solid rgba(148,163,184,.1);
-     box-shadow:inset 0 1px 4px rgba(0,0,0,.3)}}
+     box-shadow:inset 0 1px 4px rgba(0,0,0,.3);overflow-x:auto}}
 pre code{{background:transparent;color:inherit;padding:0}}
 
 /* ── 分隔线 ── */
@@ -253,9 +240,9 @@ tr:nth-child(even) td{{background:rgba(148,163,184,.03)}}
 }}
 .footer .flogo{{width:22px;height:22px;border-radius:6px;object-fit:cover;opacity:.7}}
 .footer .flogo-e{{font-size:16px;opacity:.7}}
-.ftxt{{font-size:11px;color:#64748b;letter-spacing:.8px;font-family:'JetBrains Mono',monospace}}
-.ftxt .br{{color:#94a3b8;font-weight:600}}
-.ftime{{font-size:11px;color:#4a5568;letter-spacing:.5px;font-family:'JetBrains Mono',monospace}}
+.ftxt{{font-size:11px;color:#64748b;letter-spacing:.8px;font-family:'Consolas',monospace}}
+.ftxt .br{{color:#94a3b8;font-weight:700}}
+.ftime{{font-size:11px;color:#4a5568;letter-spacing:.5px;font-family:'Consolas',monospace}}
 </style></head>
 <body>
 <div class="header">
@@ -291,6 +278,88 @@ def _extract_title(html: str) -> tuple:
     return 'AI 知乎总结', html
 
 
+def _get_logo_data_uri() -> Optional[str]:
+    """获取 logo 的 data URI"""
+    if os.path.exists(_LOGO_PATH):
+        try:
+            import base64
+            with open(_LOGO_PATH, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode()
+            return f"data:image/png;base64,{b64}"
+        except Exception:
+            pass
+    return None
+
+
+async def _render_note_image_async(markdown_text: str, output_path: str, width: int = 1400) -> Optional[str]:
+    """异步渲染图片"""
+    try:
+        import markdown as md
+    except ImportError as e:
+        logger.error(f"缺少 markdown 依赖: {e}")
+        return None
+
+    try:
+        import time as _time
+        from datetime import datetime
+        render_start = _time.time()
+
+        # Markdown → HTML
+        html_body = md.markdown(
+            markdown_text,
+            extensions=['tables', 'fenced_code', 'nl2br'],
+        )
+
+        # 提取标题
+        title_text, html_body = _extract_title(html_body)
+
+        # 将 h2 章节包裹为卡片
+        html_body = _wrap_sections_in_cards(html_body)
+
+        # 获取 logo
+        logo_uri = _get_logo_data_uri()
+
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        # 构建完整 HTML
+        full_html = _build_full_html(html_body, logo_uri, title_text, now_str)
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # 使用 playwright 渲染
+        browser = await _get_browser()
+        page = await browser.new_page(viewport={'width': width, 'height': 1080})
+
+        # 设置内容
+        await page.set_content(full_html, wait_until='networkidle')
+
+        # 等待页面完全渲染
+        await page.wait_for_timeout(500)
+
+        # 获取页面实际高度
+        body_height = await page.evaluate('() => document.body.scrollHeight')
+
+        # 调整 viewport 高度
+        await page.set_viewport_size({'width': width, 'height': body_height})
+
+        # 截图
+        await page.screenshot(path=output_path, full_page=False)
+
+        await page.close()
+
+        if os.path.exists(output_path):
+            render_secs = round(_time.time() - render_start, 1)
+            logger.info(f"总结图片已生成: {output_path} ({os.path.getsize(output_path)} bytes, 渲染{render_secs}s)")
+            return output_path
+        else:
+            logger.error("playwright 未生成文件")
+            return None
+
+    except Exception as e:
+        logger.error(f"渲染总结图片失败: {e}", exc_info=True)
+        return None
+
+
 def render_note_image(
     markdown_text: str,
     output_path: str,
@@ -305,55 +374,20 @@ def render_note_image(
     :return: 成功返回图片路径，失败返回 None
     """
     try:
-        import markdown as md
-        import imgkit
-    except ImportError as e:
-        logger.error(f"缺少依赖: {e}. 请安装: pip install markdown imgkit")
-        return None
-
-    try:
-        import time as _time
-        from datetime import datetime
-        render_start = _time.time()
-
-        html_body = md.markdown(
-            markdown_text,
-            extensions=['tables', 'fenced_code', 'nl2br'],
-        )
-
-        # 提取标题
-        title_text, html_body = _extract_title(html_body)
-
-        # 将 h2 章节包裹为卡片
-        html_body = _wrap_sections_in_cards(html_body)
-
-        logo_uri = _get_logo_base64()
-
-        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        full_html = _build_full_html(html_body, logo_uri, title_text, now_str)
-
-        options = {
-            'format': 'png',
-            'width': str(width),
-            'encoding': 'UTF-8',
-            'quality': '94',
-            'enable-local-file-access': '',
-            'no-stop-slow-scripts': '',
-            'disable-smart-width': '',
-        }
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        imgkit.from_string(full_html, output_path, options=options)
-
-        if os.path.exists(output_path):
-            render_secs = round(_time.time() - render_start, 1)
-            logger.info(f"总结图片已生成: {output_path} ({os.path.getsize(output_path)} bytes, 渲染{render_secs}s)")
-            return output_path
-        else:
-            logger.error("imgkit 未生成文件")
-            return None
-
+        # 检查是否有正在运行的事件循环
+        try:
+            loop = asyncio.get_running_loop()
+            # 如果有正在运行的循环，创建任务
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run,
+                    _render_note_image_async(markdown_text, output_path, width)
+                )
+                return future.result()
+        except RuntimeError:
+            # 没有运行中的循环，直接运行
+            return asyncio.run(_render_note_image_async(markdown_text, output_path, width))
     except Exception as e:
         logger.error(f"渲染总结图片失败: {e}", exc_info=True)
         return None
