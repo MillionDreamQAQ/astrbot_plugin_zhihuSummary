@@ -42,14 +42,14 @@ pip install -r requirements.txt
 
 | 配置项 | 说明 |
 |--------|------|
-| **zhihu_cookie_z_c0** | 知乎 Cookie `z_c0` 值 |
+| **zhihu_cookie** | 知乎 Cookie 值 |
 
-#### 如何获取 z_c0
+#### 如何获取 Cookie
 
 1. 在浏览器中登录 [知乎](https://www.zhihu.com)
 2. 按 `F12` 打开开发者工具
 3. 切换到 `Application` → `Cookies` → `https://www.zhihu.com`
-4. 找到 `z_c0`，复制其值填入插件配置
+4. 复制其值填入插件配置
 
 ### 可选配置
 
@@ -126,7 +126,7 @@ astrbot_plugin_zhihuSummary/
 
 **Q: 提示 "Cookie 已失效" 怎么办？**
 
-A: 知乎的 `z_c0` Cookie 会过期，重新从浏览器获取并更新配置即可。
+A: 知乎的 Cookie 会过期，重新从浏览器获取并更新配置即可。
 
 **Q: 部分长文章总结不完整？**
 

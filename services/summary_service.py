@@ -23,8 +23,8 @@ from ..gpt.prompt_builder import (
 class SummaryService:
     """知乎内容总结服务"""
 
-    def __init__(self, z_c0: str):
-        self.z_c0 = z_c0
+    def __init__(self, cookie_str: str):
+        self.cookie_str = cookie_str
 
     async def generate_summary(
         self,
@@ -50,7 +50,7 @@ class SummaryService:
         """
         # 1. 获取内容
         logger.info(f"获取知乎内容: type={content_type}, id={content_id}")
-        content_data = await fetch_content(content_type, content_id, self.z_c0)
+        content_data = await fetch_content(content_type, content_id, self.cookie_str)
 
         if not content_data:
             return None

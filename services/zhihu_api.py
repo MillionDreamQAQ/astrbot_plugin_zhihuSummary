@@ -3,6 +3,8 @@
 
 通过知乎非官方 API 获取回答和文章内容。
 支持限流和错误处理。
+
+Cookie 配置：支持传入完整的 Cookie 字符串（从浏览器复制）
 """
 
 import asyncio
@@ -11,7 +13,9 @@ from typing import Optional
 
 import aiohttp
 
-from astrbot.api import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ── 常量 ──
 
@@ -45,22 +49,31 @@ async def _rate_limit():
         _LAST_REQUEST_TIME = time.monotonic()
 
 
-def _build_headers(z_c0: str) -> dict:
-    """构建带 Cookie 的请求头"""
+def _build_headers(cookie_str: str) -> dict:
+    """
+    构建带 Cookie 的请求头。
+
+    cookie_str 可以是:
+    - 完整的浏览器 Cookie 字符串
+    """
     headers = dict(ZHIHU_API_HEADERS)
-    if z_c0:
-        headers["Cookie"] = f"z_c0={z_c0}"
+    if not cookie_str:
+        return headers
+
+    headers["Cookie"] = cookie_str
     return headers
 
 
-async def _do_request(url: str, z_c0: str, params: Optional[dict] = None) -> Optional[dict]:
+async def _do_request(
+    url: str, cookie_str: str, params: Optional[dict] = None
+) -> Optional[dict]:
     """
     发起知乎 API 请求，返回 JSON 或 None。
 
     处理 401/403/404/429 等状态码。
     """
     await _rate_limit()
-    headers = _build_headers(z_c0)
+    headers = _build_headers(cookie_str)
 
     try:
         async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
@@ -69,7 +82,10 @@ async def _do_request(url: str, z_c0: str, params: Optional[dict] = None) -> Opt
                     return await resp.json()
 
                 if resp.status in (401, 403):
-                    logger.warning(f"知乎 API 认证失败 (HTTP {resp.status})，Cookie 可能已失效")
+                    logger.warning(
+                        f"知乎 API 认证失败 (HTTP {resp.status})，"
+                        "Cookie 可能已失效或不完整。"
+                    )
                     return None
 
                 if resp.status == 404:
@@ -79,11 +95,17 @@ async def _do_request(url: str, z_c0: str, params: Optional[dict] = None) -> Opt
                 if resp.status == 429:
                     logger.warning("知乎 API 限流 (HTTP 429)，等待 2 秒后重试")
                     await asyncio.sleep(2)
-                    async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as retry_session:
-                        async with retry_session.get(url, params=params, headers=headers) as retry_resp:
+                    async with aiohttp.ClientSession(
+                        timeout=REQUEST_TIMEOUT
+                    ) as retry_session:
+                        async with retry_session.get(
+                            url, params=params, headers=headers
+                        ) as retry_resp:
                             if retry_resp.status == 200:
                                 return await retry_resp.json()
-                            logger.warning(f"知乎 API 重试失败 (HTTP {retry_resp.status})")
+                            logger.warning(
+                                f"知乎 API 重试失败 (HTTP {retry_resp.status})"
+                            )
                             return None
 
                 logger.warning(f"知乎 API 请求失败: HTTP {resp.status}")
@@ -99,7 +121,8 @@ async def _do_request(url: str, z_c0: str, params: Optional[dict] = None) -> Opt
 
 # ── 内容获取函数 ──
 
-async def fetch_answer(answer_id: str, z_c0: str) -> Optional[dict]:
+
+async def fetch_answer(answer_id: str, cookie_str: str) -> Optional[dict]:
     """
     获取知乎回答详情。
 
@@ -114,7 +137,7 @@ async def fetch_answer(answer_id: str, z_c0: str) -> Optional[dict]:
         ),
     }
 
-    data = await _do_request(url, z_c0, params)
+    data = await _do_request(url, cookie_str, params)
     if not data:
         return None
 
@@ -137,7 +160,7 @@ async def fetch_answer(answer_id: str, z_c0: str) -> Optional[dict]:
         return None
 
 
-async def fetch_article(article_id: str, z_c0: str) -> Optional[dict]:
+async def fetch_article(article_id: str, cookie_str: str) -> Optional[dict]:
     """
     获取知乎专栏文章详情。
 
@@ -145,11 +168,11 @@ async def fetch_article(article_id: str, z_c0: str) -> Optional[dict]:
     """
     url = f"https://api.zhihu.com/articles/{article_id}"
 
-    data = await _do_request(url, z_c0)
+    data = await _do_request(url, cookie_str)
     if not data:
         # 尝试备用端点
         url = f"https://www.zhihu.com/api/v4/articles/{article_id}"
-        data = await _do_request(url, z_c0)
+        data = await _do_request(url, cookie_str)
         if not data:
             return None
 
@@ -173,7 +196,7 @@ async def fetch_article(article_id: str, z_c0: str) -> Optional[dict]:
         return None
 
 
-async def fetch_question_top_answer(question_id: str, z_c0: str) -> Optional[dict]:
+async def fetch_question_top_answer(question_id: str, cookie_str: str) -> Optional[dict]:
     """
     获取问题下的默认排序第一个回答（通常是高赞回答）。
 
@@ -190,7 +213,7 @@ async def fetch_question_top_answer(question_id: str, z_c0: str) -> Optional[dic
         ),
     }
 
-    data = await _do_request(url, z_c0, params)
+    data = await _do_request(url, cookie_str, params)
     if not data:
         return None
 
@@ -225,26 +248,26 @@ async def fetch_question_top_answer(question_id: str, z_c0: str) -> Optional[dic
 async def fetch_content(
     content_type: str,
     content_id: str,
-    z_c0: str,
+    cookie_str: str,
 ) -> Optional[dict]:
     """
     统一内容获取入口。
 
     :param content_type: "answer" | "article" | "question"
     :param content_id: 内容 ID
-    :param z_c0: 知乎 z_c0 Cookie 值
+    :param cookie_str: 完整 Cookie 字符串（从浏览器复制）
     :return: 标准化内容 dict 或 None
     """
-    if not z_c0:
-        logger.warning("未配置知乎 Cookie z_c0")
+    if not cookie_str:
+        logger.warning("未配置知乎 Cookie")
         return None
 
     if content_type == "answer":
-        return await fetch_answer(content_id, z_c0)
+        return await fetch_answer(content_id, cookie_str)
     elif content_type == "article":
-        return await fetch_article(content_id, z_c0)
+        return await fetch_article(content_id, cookie_str)
     elif content_type == "question":
-        return await fetch_question_top_answer(content_id, z_c0)
+        return await fetch_question_top_answer(content_id, cookie_str)
     else:
         logger.warning(f"不支持的内容类型: {content_type}")
         return None

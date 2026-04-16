@@ -1,9 +1,9 @@
 {
-  "zhihu_cookie_z_c0": {
-    "description": "知乎 Cookie z_c0 值",
+  "zhihu_cookie": {
+    "description": "知乎 Cookie",
     "type": "string",
     "default": "",
-    "hint": "登录知乎后从浏览器 Cookie 中复制 z_c0 的值粘贴到这里"
+    "hint": "登录知乎后，在浏览器 F12 → Network → 任意 zhihu.com 请求 → Request Headers → Cookie，复制完整值粘贴到这里。"
   },
   "debug_mode": {
     "description": "启用调试日志",

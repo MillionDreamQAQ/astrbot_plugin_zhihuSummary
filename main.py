@@ -40,11 +40,11 @@ class ZhihuSummaryPlugin(Star):
         self._log("══════ [zhihuSummary] 插件初始化开始 ══════")
 
         # 知乎 Cookie
-        self.z_c0 = str(self.config.get("zhihu_cookie_z_c0", "")).strip()
-        self._log(f"Cookie 状态: {'已配置' if self.z_c0 else '未配置'}")
+        self.cookie_str = str(self.config.get("zhihu_cookie", "")).strip()
+        self._log(f"Cookie 状态: {'已配置' if self.cookie_str else '未配置'}")
 
         # 总结服务
-        self.summary_service = SummaryService(z_c0=self.z_c0)
+        self.summary_service = SummaryService(cookie_str=self.cookie_str)
 
         # LLM 配置
         self.llm_provider = self.config.get("llm_provider", "astrbot")
@@ -71,10 +71,10 @@ class ZhihuSummaryPlugin(Star):
 
         self._log("══════ [zhihuSummary] 插件初始化完成 ══════")
 
-        if self.z_c0:
+        if self.cookie_str:
             logger.info("zhihuSummary 插件已加载（知乎 Cookie 已配置）")
         else:
-            logger.info("zhihuSummary 插件已加载（知乎 Cookie 未配置，请在插件设置中填写 z_c0）")
+            logger.info("zhihuSummary 插件已加载（知乎 Cookie 未配置，请在插件设置中填写）")
 
     # ==================== 工具方法 ====================
 
@@ -152,7 +152,7 @@ class ZhihuSummaryPlugin(Star):
     @filter.command("知乎帮助", alias={"zhihu_help", "知乎help"})
     async def help_cmd(self, event: AstrMessageEvent):
         """显示帮助信息"""
-        cookie_status = "✅ 已配置" if self.z_c0 else "❌ 未配置"
+        cookie_status = "✅ 已配置" if self.cookie_str else "❌ 未配置"
         detect_status = "✅ 已开启" if self.enable_auto_detect else "❌ 已关闭"
         image_status = "✅ 图片模式" if self.config.get("output_image", True) else "📝 纯文本模式"
 
@@ -175,7 +175,7 @@ class ZhihuSummaryPlugin(Star):
 
 💡 **提示：**
 • Cookie 未配置时无法获取内容
-• 从浏览器 Cookie 中复制 z_c0 值填入插件配置即可"""
+• 从浏览器 F12 → Network → 任意 zhihu.com 请求 → 复制完整 Cookie 字符串"""
 
         yield event.plain_result(help_text)
 
@@ -195,10 +195,10 @@ class ZhihuSummaryPlugin(Star):
             return
 
         # Cookie 检查
-        if not self.z_c0:
+        if not self.cookie_str:
             yield event.plain_result(
-                "❌ 未配置知乎 Cookie，请在插件设置中填写 z_c0 值。\n"
-                "💡 获取方法：登录知乎 → 浏览器 F12 → Application → Cookies → 复制 z_c0 的值"
+                "❌ 未配置知乎 Cookie，请在插件设置中填写完整 Cookie。\n"
+                "💡 获取方法：登录知乎 → 浏览器 F12 → Network → 任意 zhihu.com 请求 → 复制完整 Cookie"
             )
             return
 
@@ -257,7 +257,7 @@ class ZhihuSummaryPlugin(Star):
         if not note:
             yield event.plain_result(
                 "❌ 获取内容失败。可能原因：\n"
-                "• Cookie 已失效，请更新 z_c0\n"
+                "• Cookie 已失效，请重新从浏览器复制完整 Cookie\n"
                 "• 内容不存在或已被删除\n"
                 "• 网络连接问题"
             )
@@ -292,7 +292,7 @@ class ZhihuSummaryPlugin(Star):
             return
 
         # Cookie 检查
-        if not self.z_c0:
+        if not self.cookie_str:
             return
 
         # 检测知乎链接
