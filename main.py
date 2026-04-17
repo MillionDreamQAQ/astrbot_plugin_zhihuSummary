@@ -132,7 +132,8 @@ class ZhihuSummaryPlugin(Star):
         """
         if not self.config.get("output_image", True):
             self._log("[Render] 纯文本模式")
-            return note_text
+            from utils.md_to_plain import markdown_to_plain
+            return markdown_to_plain(note_text)
 
         img_filename = f"note_{int(time.time() * 1000)}.png"
         img_path = os.path.join(self.data_dir, "images", img_filename)
@@ -144,8 +145,9 @@ class ZhihuSummaryPlugin(Star):
             self._log(f"[Render] 成功: {os.path.getsize(result)} bytes")
             return [Image.fromFileSystem(result)]
         else:
-            self._log("[Render] 渲染失败，回退纯文本")
-            return note_text
+            self._log("[Render] 渲染失败，回退纯净文本")
+            from utils.md_to_plain import markdown_to_plain
+            return markdown_to_plain(note_text)
 
     async def _generate_and_render_summary(
         self, content_type: str, content_id: str
