@@ -40,6 +40,7 @@ class SummaryService:
         max_length: int = 4000,
         long_text_strategy: str = "truncate",
         long_text_threshold: int = 15000,
+        enable_ai_comment: bool = False,
     ) -> Optional[str]:
         """
         生成知乎内容总结。
@@ -51,6 +52,7 @@ class SummaryService:
         :param max_length: 总结最大字符数
         :param long_text_strategy: "truncate" | "map_reduce"
         :param long_text_threshold: 长文本阈值
+        :param enable_ai_comment: 是否启用AI点评
         :return: Markdown 总结文本
         """
         # 1. 获取内容
@@ -81,7 +83,7 @@ class SummaryService:
             if long_text_strategy == "map_reduce":
                 logger.info(f"长文本({char_count}字)，使用 Map-Reduce 策略")
                 markdown = await self._summarize_map_reduce(
-                    content_data, style, llm_ask_func
+                    content_data, style, llm_ask_func, enable_ai_comment
                 )
             else:
                 logger.info(f"长文本({char_count}字)，截断到 {long_text_threshold} 字")
@@ -90,10 +92,10 @@ class SummaryService:
                     + "\n\n...(内容过长，已截断，完整内容请查看原文)"
                 )
                 markdown = await self._summarize_direct(
-                    content_data, style, llm_ask_func
+                    content_data, style, llm_ask_func, enable_ai_comment
                 )
         else:
-            markdown = await self._summarize_direct(content_data, style, llm_ask_func)
+            markdown = await self._summarize_direct(content_data, style, llm_ask_func, enable_ai_comment)
 
         if not markdown:
             return "❌ LLM 生成总结失败"
@@ -109,6 +111,7 @@ class SummaryService:
         content_data: dict,
         style: str,
         llm_ask_func,
+        enable_ai_comment: bool = False,
     ) -> Optional[str]:
         """直接总结：单次 LLM 调用"""
         ctype = content_data.get("type", "answer")
@@ -124,6 +127,7 @@ class SummaryService:
                 voteup_count=voteup,
                 content_text=text,
                 style=style,
+                enable_ai_summary=enable_ai_comment,
             )
         else:
             prompt = build_answer_prompt(
@@ -132,6 +136,7 @@ class SummaryService:
                 voteup_count=voteup,
                 content_text=text,
                 style=style,
+                enable_ai_summary=enable_ai_comment,
             )
 
         logger.info("调用 LLM 生成总结...")
@@ -142,6 +147,7 @@ class SummaryService:
         content_data: dict,
         style: str,
         llm_ask_func,
+        enable_ai_comment: bool = False,
     ) -> Optional[str]:
         """Map-Reduce 总结：分段总结后合并"""
         text = content_data.get("content_text", "")
@@ -176,6 +182,7 @@ class SummaryService:
             author_name=author,
             chunk_summaries=chunk_summaries,
             style=style,
+            enable_ai_summary=enable_ai_comment,
         )
 
         logger.info(f"合并 {len(chunk_summaries)} 个分段总结...")

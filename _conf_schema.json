@@ -111,5 +111,11 @@
     "type": "string",
     "default": "",
     "hint": "黑名单/白名单的群号列表，用英文逗号分隔"
+  },
+  "enable_ai_comment": {
+    "description": "启用AI点评",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后会在总结末尾添加AI点评（2-3句话的内容评价）"
   }
 }
