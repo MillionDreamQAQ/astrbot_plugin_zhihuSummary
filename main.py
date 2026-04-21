@@ -69,6 +69,10 @@ class ZhihuSummaryPlugin(Star):
         self.group_list = self._parse_list(str(self.config.get("group_list", "")))
         self._log(f"访问控制: mode={self.access_mode}, group_list={self.group_list}")
 
+        # AI点评开关
+        self.enable_ai_comment = bool(self.config.get("enable_ai_comment", False))
+        self._log(f"AI点评: {'启用' if self.enable_ai_comment else '禁用'}")
+
         self._log("══════ [zhihuSummary] 插件初始化完成 ══════")
 
         if self.cookie_str:
@@ -168,6 +172,7 @@ class ZhihuSummaryPlugin(Star):
                     max_length=self.max_note_length,
                     long_text_strategy=self.long_text_strategy,
                     long_text_threshold=self.long_text_threshold,
+                    enable_ai_comment=self.enable_ai_comment,
                 ),
                 timeout=self.processing_timeout,
             )
@@ -198,6 +203,7 @@ class ZhihuSummaryPlugin(Star):
         cookie_status = "✅ 已配置" if self.cookie_str else "❌ 未配置"
         detect_status = "✅ 已开启" if self.enable_auto_detect else "❌ 已关闭"
         image_status = "✅ 图片模式" if self.config.get("output_image", True) else "📝 纯文本模式"
+        ai_comment_status = "✅ 已开启" if self.enable_ai_comment else "❌ 已关闭"
 
         help_text = f"""📖 **知乎总结插件 使用指南**
 
@@ -215,6 +221,7 @@ class ZhihuSummaryPlugin(Star):
 • 自动识别: {detect_status}
 • 输出格式: {image_status}
 • 总结风格: {self.note_style}
+• AI点评: {ai_comment_status}
 
 💡 **提示：**
 • Cookie 未配置时无法获取内容

@@ -28,7 +28,7 @@ def build_answer_prompt(
     voteup_count: int,
     content_text: str,
     style: str = "professional",
-    enable_ai_summary: bool = True,
+    enable_ai_summary: bool = False,
 ) -> str:
     """
     构建知乎回答总结 Prompt。
@@ -62,7 +62,7 @@ def build_article_prompt(
     voteup_count: int,
     content_text: str,
     style: str = "detailed",
-    enable_ai_summary: bool = True,
+    enable_ai_summary: bool = False,
 ) -> str:
     """
     构建知乎文章总结 Prompt。
@@ -112,7 +112,7 @@ def build_map_merge_prompt(
     author_name: str,
     chunk_summaries: list,
     style: str = "professional",
-    enable_ai_summary: bool = True,
+    enable_ai_summary: bool = False,
 ) -> str:
     """
     构建 Map-Reduce 合并 Prompt。
