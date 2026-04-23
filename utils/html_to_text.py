@@ -49,7 +49,7 @@ class ZhihuHTMLToMarkdown(HTMLParser):
         attr_dict = dict(attrs)
         classes = attr_dict.get("class", "").split()
 
-        if tag in ("script", "style", "noscript"):
+        if tag in ("script", "style", "noscript", "svg"):
             self._skip_tag = True
             return
 
@@ -88,8 +88,9 @@ class ZhihuHTMLToMarkdown(HTMLParser):
                 if alt and ("\\" in alt or "$" in alt or "_" in alt):
                     # 可能是 LaTeX
                     self._emit(f" ${alt}$ ")
-                elif src:
-                    self._emit(f"![{alt}]({src})")
+                # 增加 src 的有效性校验
+                elif src and not src.strip().startswith(("<svg", "data:image/svg")):
+                    self._emit(f"!{alt} [<sup>2</sup>]({src})")
             else:
                 alt = attr_dict.get("alt", "")
                 src = attr_dict.get("data-original") or attr_dict.get("src", "")
@@ -161,7 +162,7 @@ class ZhihuHTMLToMarkdown(HTMLParser):
 
     def handle_endtag(self, tag: str):
         if self._skip_tag:
-            if tag in ("script", "style", "noscript"):
+            if tag in ("script", "style", "noscript", "svg"):
                 self._skip_tag = False
             return
 
