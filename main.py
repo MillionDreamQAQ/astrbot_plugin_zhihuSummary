@@ -143,6 +143,7 @@ class ZhihuSummaryPlugin(Star):
 
         self._log(f"[Render] 渲染图片: {img_path}")
         result = render_note_image(note_text, img_path)
+        self._log(f"[Render] render_note_image 返回值: {result} (type={type(result).__name__})")
 
         if result and os.path.exists(result):
             self._log(f"[Render] 成功: {os.path.getsize(result)} bytes")

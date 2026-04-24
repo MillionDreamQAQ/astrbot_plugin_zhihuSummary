@@ -34,9 +34,12 @@ async def _get_browser():
             try:
                 # 测试连接是否有效
                 if BROWSER.is_connected():
+                    logger.info("[Render/Debug] 复用已有浏览器连接")
                     return BROWSER
-            except Exception:
-                logger.warning("浏览器连接已断开，重新创建")
+                else:
+                    logger.warning("[Render/Debug] 浏览器连接已断开")
+            except Exception as e:
+                logger.warning(f"[Render/Debug] 浏览器连接检查异常: {e}")
                 BROWSER = None
 
         # 创建新的浏览器实例
@@ -44,11 +47,13 @@ async def _get_browser():
             try:
                 from playwright.async_api import async_playwright
 
+                logger.info("[Render/Debug] 正在启动 Playwright...")
                 PLAYWRIGHT = await async_playwright().start()
+                logger.info("[Render/Debug] Playwright 已启动，正在启动 Chromium...")
                 BROWSER = await PLAYWRIGHT.chromium.launch()
-                logger.info("浏览器实例已创建")
+                logger.info("[Render/Debug] 浏览器实例已创建")
             except Exception as e:
-                logger.error(f"启动浏览器失败: {e}")
+                logger.error(f"[Render/Debug] 启动浏览器失败: {type(e).__name__}: {e}")
                 raise
 
         return BROWSER
@@ -92,11 +97,15 @@ async def _render_note_image_async(
 
         render_start = _time.time()
 
+        logger.info(f"[Render/Debug] 输入 markdown 长度: {len(markdown_text)}")
+        logger.info(f"[Render/Debug] markdown 前100字符: {markdown_text[:100]!r}")
+
         # Markdown → HTML
         html_body = md.markdown(
             markdown_text,
             extensions=["tables", "fenced_code", "nl2br"],
         )
+        logger.info(f"[Render/Debug] HTML 转换后长度: {len(html_body)}")
 
         # 提取标题
         title_text, html_body = _extract_title(html_body)
@@ -116,29 +125,41 @@ async def _render_note_image_async(
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                logger.info(f"[Render/Debug] 尝试获取浏览器 ({attempt + 1}/{max_retries})...")
                 browser = await _get_browser()
+                logger.info(f"[Render/Debug] 浏览器获取成功: {browser}")
                 break
             except Exception as e:
-                if attempt == max_retries - 1:
-                    raise
                 logger.warning(
-                    f"获取浏览器失败 (尝试 {attempt + 1}/{max_retries}): {e}"
+                    f"[Render/Debug] 获取浏览器失败 (尝试 {attempt + 1}/{max_retries}): {type(e).__name__}: {e}"
                 )
+                if attempt == max_retries - 1:
+                    logger.error(f"[Render/Debug] 浏览器获取重试耗尽，放弃")
+                    raise
                 await asyncio.sleep(1)
+
+        logger.info(f"[Render/Debug] 浏览器获取成功，准备创建页面")
 
         # 创建新页面
         page = await browser.new_page(
             viewport={"width": width, "height": 2000}, device_scale_factor=1
         )
+        logger.info(f"[Render/Debug] 页面创建成功")
+
+        logger.info(f"[Render/Debug] HTML 内容长度: {len(full_html)}")
 
         # 设置内容 - 使用更长的等待时间
+        logger.info(f"[Render/Debug] 开始设置页面内容...")
         await page.set_content(full_html, wait_until="networkidle", timeout=30000)
+        logger.info(f"[Render/Debug] 页面内容设置完成")
 
         # 额外等待确保渲染完成
         await page.wait_for_timeout(300)
+        logger.info(f"[Render/Debug] 额外等待完成")
 
         # 获取精确的内容尺寸
         try:
+            logger.info(f"[Render/Debug] 正在获取页面尺寸...")
             content_size = await page.evaluate(
                 """() => {
                 const body = document.body;
@@ -169,8 +190,9 @@ async def _render_note_image_async(
                 return { width: contentWidth, height: contentHeight };
             }"""
             )
+            logger.info(f"[Render/Debug] 页面尺寸: {content_size}")
         except Exception as e:
-            logger.warning(f"获取尺寸失败，使用默认值: {e}")
+            logger.warning(f"[Render/Debug] 获取尺寸失败，使用默认值: {type(e).__name__}: {e}")
             content_size = {"width": width, "height": 2000}
 
         # 转换为整数
@@ -179,12 +201,15 @@ async def _render_note_image_async(
 
         # 设置 viewport
         await page.set_viewport_size({"width": content_width, "height": content_height})
+        logger.info(f"[Render/Debug] viewport 设置为: {content_width}x{content_height}")
 
         # 截图（指定 clip 区域）
+        logger.info(f"[Render/Debug] 开始截图到: {output_path}")
         await page.screenshot(
             path=output_path,
             clip={"x": 0, "y": 0, "width": content_width, "height": content_height},
         )
+        logger.info(f"[Render/Debug] 截图操作完成")
 
         if os.path.exists(output_path):
             file_size = os.path.getsize(output_path)
@@ -194,11 +219,14 @@ async def _render_note_image_async(
             )
             return output_path
         else:
-            logger.error("playwright 未生成文件")
+            logger.error(f"[Render/Debug] 截图后文件不存在: {output_path}")
+            logger.error(f"[Render/Debug] 输出目录: {os.path.dirname(output_path)}")
+            logger.error(f"[Render/Debug] 目录是否存在: {os.path.exists(os.path.dirname(output_path))}")
+            logger.error(f"[Render/Debug] 目录内容: {os.listdir(os.path.dirname(output_path)) if os.path.exists(os.path.dirname(output_path)) else 'N/A'}")
             return None
 
     except Exception as e:
-        logger.error(f"渲染总结图片失败: {e}", exc_info=True)
+        logger.error(f"[Render/Debug] 渲染过程异常: {type(e).__name__}: {e}", exc_info=True)
         return None
 
     finally:
@@ -425,11 +453,18 @@ def render_note_image(
         thread.start()
         thread.join(timeout=60)  # 60秒超时
 
+        if not thread.is_alive():
+            logger.info(f"[Render/Debug] 渲染线程正常结束")
+        else:
+            logger.error(f"[Render/Debug] 渲染线程超时（60秒）！")
+
         if exception[0]:
+            logger.error(f"[Render/Debug] 线程内异常: {type(exception[0]).__name__}: {exception[0]}", exc_info=True)
             raise exception[0]
 
+        logger.info(f"[Render/Debug] render_note_image 返回: {result[0]}")
         return result[0]
 
     except Exception as e:
-        logger.error(f"渲染总结图片失败: {e}", exc_info=True)
+        logger.error(f"[Render/Debug] render_note_image 外层异常: {type(e).__name__}: {e}", exc_info=True)
         return None
