@@ -6,12 +6,11 @@ Markdown → 图片渲染
 """
 
 import asyncio
-import logging
 import os
 import re
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 # 异步锁用于浏览器管理
 _lock = asyncio.Lock()

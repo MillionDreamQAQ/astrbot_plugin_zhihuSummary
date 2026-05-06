@@ -11,11 +11,9 @@ import asyncio
 import time
 from typing import Optional
 
-import logging
-
 import aiohttp
 
-logger = logging.getLogger(__name__)
+from astrbot.api import logger
 
 # ── 常量 ──
 
