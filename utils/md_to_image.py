@@ -8,6 +8,7 @@ Markdown → 图片渲染
 import asyncio
 import os
 import re
+import threading
 from typing import Optional
 
 from astrbot.api import logger
@@ -17,6 +18,9 @@ _lock = asyncio.Lock()
 BROWSER = None
 PLAYWRIGHT = None
 CLOSING = False
+
+# 同步锁用于跨线程的渲染操作控制（防止并发导致浏览器状态混乱）
+_render_lock = threading.Lock()
 
 
 async def _get_browser():
@@ -36,9 +40,10 @@ async def _get_browser():
                     logger.info("[Render/Debug] 复用已有浏览器连接")
                     return BROWSER
                 else:
-                    logger.warning("[Render/Debug] 浏览器连接已断开")
+                    logger.warning("[Render/Debug] 浏览器连接已断开，重新创建")
+                    BROWSER = None
             except Exception as e:
-                logger.warning(f"[Render/Debug] 浏览器连接检查异常: {e}")
+                logger.warning(f"[Render/Debug] 浏览器连接检查异常: {e}，重新创建")
                 BROWSER = None
 
         # 创建新的浏览器实例
@@ -56,6 +61,29 @@ async def _get_browser():
                 raise
 
         return BROWSER
+
+
+async def _reset_browser():
+    """重置浏览器实例（当检测到异常时调用）"""
+    global BROWSER, PLAYWRIGHT, CLOSING
+
+    async with _lock:
+        logger.warning("[Render/Debug] 正在重置浏览器实例...")
+        CLOSING = True
+        if BROWSER is not None:
+            try:
+                await BROWSER.close()
+            except Exception:
+                pass
+            BROWSER = None
+        if PLAYWRIGHT is not None:
+            try:
+                await PLAYWRIGHT.stop()
+            except Exception:
+                pass
+            PLAYWRIGHT = None
+        CLOSING = False
+        logger.info("[Render/Debug] 浏览器实例已重置")
 
 
 async def close_browser():
@@ -124,7 +152,9 @@ async def _render_note_image_async(
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                logger.info(f"[Render/Debug] 尝试获取浏览器 ({attempt + 1}/{max_retries})...")
+                logger.info(
+                    f"[Render/Debug] 尝试获取浏览器 ({attempt + 1}/{max_retries})..."
+                )
                 browser = await _get_browser()
                 logger.info(f"[Render/Debug] 浏览器获取成功: {browser}")
                 break
@@ -159,8 +189,7 @@ async def _render_note_image_async(
         # 获取精确的内容尺寸
         try:
             logger.info(f"[Render/Debug] 正在获取页面尺寸...")
-            content_size = await page.evaluate(
-                """() => {
+            content_size = await page.evaluate("""() => {
                 const body = document.body;
                 const html = document.documentElement;
 
@@ -187,11 +216,12 @@ async def _render_note_image_async(
                 }
 
                 return { width: contentWidth, height: contentHeight };
-            }"""
-            )
+            }""")
             logger.info(f"[Render/Debug] 页面尺寸: {content_size}")
         except Exception as e:
-            logger.warning(f"[Render/Debug] 获取尺寸失败，使用默认值: {type(e).__name__}: {e}")
+            logger.warning(
+                f"[Render/Debug] 获取尺寸失败，使用默认值: {type(e).__name__}: {e}"
+            )
             content_size = {"width": width, "height": 2000}
 
         # 转换为整数
@@ -220,12 +250,35 @@ async def _render_note_image_async(
         else:
             logger.error(f"[Render/Debug] 截图后文件不存在: {output_path}")
             logger.error(f"[Render/Debug] 输出目录: {os.path.dirname(output_path)}")
-            logger.error(f"[Render/Debug] 目录是否存在: {os.path.exists(os.path.dirname(output_path))}")
-            logger.error(f"[Render/Debug] 目录内容: {os.listdir(os.path.dirname(output_path)) if os.path.exists(os.path.dirname(output_path)) else 'N/A'}")
+            logger.error(
+                f"[Render/Debug] 目录是否存在: {os.path.exists(os.path.dirname(output_path))}"
+            )
+            logger.error(
+                f"[Render/Debug] 目录内容: {os.listdir(os.path.dirname(output_path)) if os.path.exists(os.path.dirname(output_path)) else 'N/A'}"
+            )
             return None
 
     except Exception as e:
-        logger.error(f"[Render/Debug] 渲染过程异常: {type(e).__name__}: {e}", exc_info=True)
+        logger.error(
+            f"[Render/Debug] 渲染过程异常: {type(e).__name__}: {e}", exc_info=True
+        )
+        # 如果是浏览器相关错误，尝试重置浏览器实例
+        error_msg = str(e).lower()
+        if any(
+            keyword in error_msg
+            for keyword in [
+                "browser",
+                "connection",
+                "target closed",
+                "session",
+                "playwright",
+            ]
+        ):
+            logger.warning("[Render/Debug] 检测到浏览器相关错误，尝试重置浏览器实例")
+            try:
+                await _reset_browser()
+            except Exception as reset_error:
+                logger.error(f"[Render/Debug] 重置浏览器失败: {reset_error}")
         return None
 
     finally:
@@ -428,42 +481,48 @@ def render_note_image(
     :param width: 图片宽度
     :return: 成功返回图片路径，失败返回 None
     """
-    try:
-        # 在新线程中运行异步代码，避免事件循环冲突
-        import threading
+    global BROWSER
 
-        result = [None]
-        exception = [None]
+    with _render_lock:
+        try:
+            result = [None]
+            exception = [None]
 
-        def run_in_thread():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            def run_in_thread():
                 try:
-                    result[0] = loop.run_until_complete(
-                        _render_note_image_async(markdown_text, output_path, width)
-                    )
-                finally:
-                    loop.close()
-            except Exception as e:
-                exception[0] = e
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result[0] = loop.run_until_complete(
+                            _render_note_image_async(markdown_text, output_path, width)
+                        )
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    exception[0] = e
 
-        thread = threading.Thread(target=run_in_thread)
-        thread.start()
-        thread.join(timeout=60)  # 60秒超时
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join(timeout=60)  # 60秒超时
 
-        if not thread.is_alive():
-            logger.info(f"[Render/Debug] 渲染线程正常结束")
-        else:
-            logger.error(f"[Render/Debug] 渲染线程超时（60秒）！")
+            if not thread.is_alive():
+                logger.info(f"[Render/Debug] 渲染线程正常结束")
+            else:
+                logger.error(f"[Render/Debug] 渲染线程超时（60秒）！")
 
-        if exception[0]:
-            logger.error(f"[Render/Debug] 线程内异常: {type(exception[0]).__name__}: {exception[0]}", exc_info=True)
-            raise exception[0]
+            if exception[0]:
+                logger.error(
+                    f"[Render/Debug] 线程内异常: {type(exception[0]).__name__}: {exception[0]}",
+                    exc_info=True,
+                )
+                raise exception[0]
 
-        logger.info(f"[Render/Debug] render_note_image 返回: {result[0]}")
-        return result[0]
+            logger.info(f"[Render/Debug] render_note_image 返回: {result[0]}")
+            return result[0]
 
-    except Exception as e:
-        logger.error(f"[Render/Debug] render_note_image 外层异常: {type(e).__name__}: {e}", exc_info=True)
-        return None
+        except Exception as e:
+            logger.error(
+                f"[Render/Debug] render_note_image 外层异常: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            return None
